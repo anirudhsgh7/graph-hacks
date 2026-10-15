@@ -92,6 +92,17 @@ def test_rate_limited_is_reported(llm):
     assert any(n.startswith("LLM_RATE_LIMITED") for n in p["meta"]["notes"])
 
 
+def test_rate_limit_mid_loop_runs_the_full_planner(llm):
+    """A model run cut short (e.g. 429 after 2 tool calls) must not ship partial findings."""
+    llm.SCRIPT.extend([RING_SCRIPT[0], {"status": 429}])
+    p = _investigate()
+    assert p["meta"]["mode"] == "rule_based" and p["meta"]["narrative_source"] == "deterministic"
+    assert any(n.startswith("LLM_RATE_LIMITED") for n in p["meta"]["notes"])
+    assert p["conclusion"] == "suspicious"
+    assert len(p["findings"]) == 4              # the full deterministic investigation ran
+    assert len(p["trace"]) >= 5                 # planner steps, not the two the model managed
+
+
 def test_invalid_final_answer_twice_uses_deterministic_summary(llm):
     llm.SCRIPT.extend(RING_SCRIPT + [reply_text("done"), reply_text("not json"), reply_text("{still not")])
     p = _investigate()

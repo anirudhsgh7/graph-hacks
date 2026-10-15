@@ -249,6 +249,7 @@ def investigate(db: Database, question: str, case_id: str | None = None,
     context = case_context(case, sorted(s.run.frozen()), previous[0]["summary"] if previous else None)
 
     mode, answer, model = "rule_based", None, None
+    llm_failed = False
     if settings.llm_enabled:
         mode, model = "llm", settings.llm_model
         try:
@@ -256,12 +257,16 @@ def investigate(db: Database, question: str, case_id: str | None = None,
         except LLMError as exc:
             notes.append(f"{exc.code}: {exc}")
             log.warning("LLM failed: %s", exc)
-        if not s.run.evidence.all():
+            llm_failed = True
+        if llm_failed or not s.run.evidence.all():
+            # Never ship a half-finished model run (rate limits, outages): fall back to the
+            # full deterministic investigation instead of accepting partial evidence.
             mode = "rule_based"
-            notes.append("the model gathered no evidence; the rule-based investigator ran instead")
-    if not s.run.evidence.all():
-        if not seeds:
-            raise InvestigationError("BAD_REQUEST", "name an account (e.g. A17) or open a case to investigate")
+            notes.append(("the model run failed before finishing" if llm_failed else
+                          "the model gathered no evidence") + "; the rule-based investigator ran instead")
+    if not s.run.evidence.all() and not seeds:
+        raise InvestigationError("BAD_REQUEST", "name an account (e.g. A17) or open a case to investigate")
+    if (llm_failed or not s.run.evidence.all()) and seeds:
         planner.investigate(s.run, seeds[0], s.step)
 
     conclusion = summarize.verdict(s.run.evidence)
