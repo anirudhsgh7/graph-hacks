@@ -4,7 +4,7 @@
 > and what happens next. Supersedes the earlier planning brief (`HACKATHON_DISCUSSION.pdf`) and the old
 > `docs/` folder — everything important from those now lives here.
 
-**Last updated:** Oct 15, 2026 (Day 1 of the build)
+**Last updated:** Oct 16, 2026 (Day 2 — backend delivered, frontend integrated against contract v1.1)
 
 | | |
 |---|---|
@@ -12,8 +12,8 @@
 | Track | **Track 1 — Agents That Act on Connected Data** |
 | Team | 2 people (frontend lead + AI/backend lead); teams of up to 4; one team per person |
 | Timeline | Oct 15–18, 2026 · official deadline **Oct 18, 23:59 IST** · internal submit target Oct 18, 20:00 IST |
-| Status | **Day 1 complete** — API contract frozen; full frontend console running end-to-end in mock mode (verified: production build, lint, headless-browser QA). Backend (seed + tools + agent) in progress. |
-| One-liner | An AI agent that investigates money laundering **on** a transaction graph — finds rings, traces money trails, and simulates the impact of freezing accounts before acting on them. |
+| Status | **Day 2** — backend delivered (seed + tools + agent + tests + fixtures); frontend runs in mock mode against the recordings and flips to live with one env var. |
+| One-liner | An AI agent that investigates money laundering **on** a transaction graph — finds rings, traces money trails, and proves the smallest freeze that stops the cash-out before acting on it. |
 
 ---
 
@@ -72,45 +72,54 @@ is this capability table — every product feature is a native graph operation, 
 - **Frontend** — Next.js 16 (App Router, TypeScript, Tailwind v4), Cytoscape.js for the network canvas.
   Built **mock-first**: runs fully against frozen contract fixtures until the backend lands, then flips
   to live with one environment variable.
-- **Backend** — FastAPI (Python) with the FalkorDB client. Agent loop: LLM plans → calls graph tools →
+- **Backend** — FastAPI (Python 3.11+) with the FalkorDB client. Agent loop: LLM plans → calls graph tools →
   collects evidence → writes findings + proposes actions → returns one typed JSON response. Hosted LLM
-  behind an OpenAI-compatible endpoint (default candidate: Gemini free tier; fully env-configurable —
-  pending teammate sign-off, see D4).
+  behind an OpenAI-compatible endpoint (default: **Groq** `openai/gpt-oss-120b`; fully env-configurable).
+  With no key, or if the provider fails, a rule-based investigator runs the same tools — the demo never
+  depends on the LLM. Actions are derived by the server from evidence, never written by the model.
 - **Database** — FalkorDB: Cypher over a property graph, native graph algorithms via `algo.*`, Redis-based.
+  What-if simulations run on `GRAPH.COPY` forks — the live graph is only touched by analyst-confirmed actions.
 
-**Planned agent tools** (names already appear in the real fixtures): `account_summary`,
-`shared_entities`, `detect_ring`, `money_trail`, `layering_scan`, `rank_hubs`, `laundering_capacity`,
-plus action execution (`execute_freeze`).
+**Agent tools** (implemented in `backend/agent/tools.py`; the model picks tools and fills
+parameters, it never writes Cypher): `search_accounts`, `account_profile`, `shared_infrastructure`,
+`detect_ring` (WCC + measured ringness), `money_trail` (SPpaths + time-ordering), `follow_funds`,
+`rank_hubs` (PageRank), `layering_scan`, `laundering_capacity` (max-flow), `simulate_freeze`
+(GRAPH.COPY fork), `plan_minimum_freeze` (min cut, proven on a fork). No API key or a provider
+outage falls back to the rule-based investigator over the same tools.
 
 ---
 
 ## 4. Graph data model
 
+Delivered by `backend/seed/generator.py` (fixed seed 42 — every run produces the identical world):
+**595 accounts, 8,317 transfers, 585 devices, 581 IPs**.
+
 **Nodes**
 
 | Label | Properties | Notes |
 |---|---|---|
-| `Account` | `id`, `holder_name`, `created_at`, `status` (`active` \| `flagged` \| `frozen`), `anomaly_score?` | `status` changes when the agent executes a freeze |
-| `Device` | `id`, `type` | enables shared-device pivots |
-| `IPAddress` | `id` | enables shared-IP pivots |
+| `Customer` | `id`, `name`, `segment` | synthetic owners |
+| `Account` | `id` (e.g. `A17`), `type` (personal/business/merchant/external), `opened_at`, `country`, `status`, `anomaly_score` | `status` changes when the agent executes an action |
+| `Device` | `id`, `kind` | enables shared-device pivots |
+| `IPAddress` | `id`, `addr`, `asn_country` | enables shared-IP pivots |
+| `Case`, `Investigation`, `Proposal`, `Action` | case store + audit trail | written only by the API, linked to the accounts they touched |
 
 **Edges**
 
 | Edge | Properties | Meaning |
 |---|---|---|
-| `TRANSFER` | `amount`, `ts`, `channel?` | directed money movement |
-| `USED_DEVICE` | `first_seen?` | account used a device |
-| `USED_IP` | `first_seen?` | account used an IP address |
+| `OWNS` | `since` | Customer → Account |
+| `TRANSFER` | `id`, `amount`, `ts` (epoch ms), `channel` + hidden ground truth (`ring_id`, `is_laundering` — read only by `seed/verify.py`) | directed money movement |
+| `FLOWS_TO` | `capacity`, `tx_count`, `first_ts`, `last_ts` | one edge per ordered account pair (aggregated) — required by `algo.maxFlow`, which forbids parallel edges |
+| `USED_DEVICE` / `USED_IP` | `last_seen` | account ↔ infrastructure |
 
-**Seed data** — a deterministic synthetic generator (fixed RNG seed) producing a few hundred accounts
-with realistic noise, plus the three planted structures that match the demo scenarios:
+**Planted structures** (asserted by `python -m seed.verify`, 17 checks, through the product's own tools):
 
-1. a 7-account mule ring feeding a cash-out hub (`case-001`),
-2. a 4-hop layering chain from a victim account to a terminal hub (`case-002`),
-3. a benign high-volume merchant (the honest false alarm, `case-003`).
+1. between `case-001`'s — a 7-account mule ring (`A17 A22 A31 A47 A52 A63 A68`) cashing out at hub `H3`, capacity **$30,100**, minimum freeze **A47+A52** (a bypass runs through non-ring account `A77`);
+2. `case-002` — a 4-hop fee-skimming chain `C42 → A91 → A33 → A75 → H1` completing in 26 minutes;
+3. a third ring cashing out at `H5`, a benign family sharing a tablet (`case-004`), a benign high-volume merchant topping the legacy anomaly score (`case-003`), and hubs that sweep nightly to external exchange `X9`.
 
-The seed script is committed for reproducibility and is re-run before every demo. Keep the dataset
-comfortably under the FalkorDB Cloud free-tier 100 MB cap.
+The seed script is committed for reproducibility and is re-run before every demo. The dataset is far under the FalkorDB Cloud free-tier 100 MB cap.
 
 ---
 
@@ -118,16 +127,25 @@ comfortably under the FalkorDB Cloud free-tier 100 MB cap.
 
 | Case | Alert | What the agent must show |
 |---|---|---|
-| `case-001` **Operation Burst** | 14 transfers from A17 within 2 hours to 12 recipients; most accounts opened <30 days ago | The 7-account ring (community detection), the trail A17→A22→A31→A47→H3, and a freeze simulation: $48,200/day → ~$3,900/day with one residual route (A52→A77→H3) |
-| `case-002` **Follow the money** | Customer C42 reports an unauthorized $9,800 transfer | The 4-hop chain C42→A91→A33→A75→H1 (~4% shaved per hop, each hop <27 min), hub H1 ranked #3 by PageRank, shared-device pivot between A91 and A33 |
-| `case-003` **The quiet merchant** | M8 flagged by the anomaly scorer (top 1% of transaction volume) | **Honest false alarm:** star-shaped community of 121 one-time customers, zero layering hits, no shared entities with known rings → agent recommends closing the alert with its reasoning logged |
+| `case-001` **Burst of transfers from A17** | 14 transfers from A17 within 2 hours to 12 recipients; most accounts opened <30 days ago | The 7-account ring (WCC over 3 shared devices + 2 IPs, 98% pass-through, ~13 min per hop), time-ordered trails to hub `H3` (fastest 36 min), capacity **$30,100**, and the minimum freeze **A47+A52** — proven on a graph copy — versus naive plans leaving 74% / 20% flowing |
+| `case-002` **Follow the money** | Customer C42 reports an unauthorized $9,800 transfer | The chain `C42→A91→A33→A75→H1` in 26 minutes (3.5–3.6% skimmed per hop), shared device between the mules, freeze `A75` |
+| `case-003` **The quiet merchant** | M8 flagged top-1% by the legacy anomaly score (volume) | **Honest false alarm:** 320 one-time customers, nothing passed on, no shared infrastructure with any ring → agent explains the score and proposes closing the alert |
+| `case-004` **Shared-device cluster around A95** | Four accounts A95–A98 log in from the same tablet and IP | **Honest false alarm:** 34% pass-through over days (a household), no layering hits → agent proposes closing the alert |
 
-Scenario 3 is deliberate: an agent that only ever says "yes, fraud!" is a toy. A defensible
+Scenarios 3 and 4 are deliberate: an agent that only ever says "yes, fraud!" is a toy. A defensible
 *no-evidence* answer is an integrity feature — and a memorable demo beat.
 
 ---
 
-## 6. API contract (v1 — frozen Oct 15)
+## 6. API contract (v1 summary — authoritative version: `backend/docs/api-contract.md`)
+
+> **Update (Oct 16, v1.1):** the backend delivery refined the contract — the authoritative field
+> list, new endpoints (`/api/cases`, `/api/cases/{id}/report`, `/api/evidence/replay`,
+> `/api/queries`, `/api/investigate/stream`, `/api/admin/reseed`), evidence receipts, the
+> rule-computed `conclusion`, the minimum-freeze actions and the full error-code table live in
+> [`backend/docs/api-contract.md`](./backend/docs/api-contract.md), with real responses recorded in
+> `frontend/lib/mocks/` and `backend/openapi.json` as the machine-readable schema. The section
+> below is the original v1 summary, kept for context; defer to the contract doc on any difference.
 
 The boundary between `frontend/` and `backend/`. The frontend consumes only these shapes; the backend
 produces them. Additive changes are fine (new optional fields); breaking changes need both teammates to
@@ -244,8 +262,9 @@ Success response (see `frontend/lib/mocks/scenario-1.json` for a full, valid exa
 
 **Case console (`/case/[id]`)** — the product itself, top to bottom:
 
-1. **Case briefing** — case id chip, title, live `status` badge (`complete` / `partial` / `no_evidence`),
-   and the alert text that triggered the case.
+1. **Case briefing** — case id chip, title, verdict badge (rule-computed `conclusion`:
+   `suspicious activity` / `no evidence` / `inconclusive`; `partial` shown alongside), and the alert
+   text that triggered the case.
 2. **Question bar** — free-text input + **Investigate** button, plus per-case **suggested questions**
    (chips). In mock mode the first suggested question auto-runs on page load so the deployed shell
    demos itself.
@@ -258,9 +277,11 @@ Success response (see `frontend/lib/mocks/scenario-1.json` for a full, valid exa
      - **No-evidence banner** (sky blue) when `status: "no_evidence"`.
      - **Findings panel** — each finding: title, detail, confidence % + bar, and evidence chips.
      - **Evidence detail card** — appears on selection: id, type, producing tool, node/edge ids, raw
-       `result_excerpt` JSON.
+       `result_excerpt` JSON, and the **query receipts** (named query + params + Cypher, replayable).
      - **Proposed actions** — action cards with simulated-impact bars (capacity before vs after),
-       residual routes, evidence chips, and a **Confirm / Run** button.
+       residual routes, evidence chips, and a **Confirm / Run** button. Freeze actions update the
+       canvas via the returned `graph_delta` and a snapshot refresh; the case report action links to
+       the backend-generated markdown/JSON report.
 6. **Agent trace** (full width) — every tool call in order: tool name, ok/failed badge, rows, ms,
    expandable argument JSON.
 7. **Investigation feed** (after more than one question) — click any earlier question to bring its
@@ -274,20 +295,24 @@ Success response (see `frontend/lib/mocks/scenario-1.json` for a full, valid exa
 | Device | purple diamond (`#a855f7`) |
 | IPAddress | cyan rounded rectangle (`#06b6d4`) |
 | Ring membership (`highlight.communities`) | rose border (`#f43f5e`, thick) |
+| Shared-infrastructure cluster (`highlight.infrastructure_clusters`) | gray dashed border |
+| Minimum freeze plan (`highlight.freeze_plan`) | violet dashed border (cut markers) |
+| Capacity flows (`highlight.flows`) | sky-blue thick edges (max-flow pairs) |
 | Money trail (`highlight.paths`) | amber node border + amber edges (`#f59e0b`) |
 | Selected evidence emphasis | bright amber glow (node overlay + thick edges) |
 | `USED_DEVICE` / `USED_IP` edges | dashed gray |
 | Transfer amounts | edge labels when ≤ 30 transfers in view |
 | Frozen accounts | slate/gray, dimmed |
-| Layout | deterministic **preset** from `x_hint`/`y_hint` (0..1); falls back to force layout if absent |
+| Layout | deterministic **preset** from `x_hint`/`y_hint` (main path, left → right); devices/IPs land at the barycenter of their neighbours; falls back to force layout if no hints |
 
 ### 7.3 Interactions
 
 - Ask via free text (submit) or a suggested-question chip → new investigation.
 - Click a finding → graph emphasizes **all of its evidence**; click a specific evidence chip → tight
   emphasis of exactly that evidence's `node_ids`/`edge_ids` + the evidence detail card opens.
-- Confirm/Run an action → `POST /api/actions/execute` → card flips to green **executed** (mock mode
-  returns success instantly; live mode writes to the graph).
+- Confirm/Run an action → `POST /api/actions/execute` → card flips to green **executed**; the canvas
+  applies the returned `graph_delta` and refreshes from `GET /api/graph/snapshot` (live mode writes to
+  the graph; mock mode replays the recorded responses and remembers freezes per case).
 - Graph supports pan/zoom; a `ResizeObserver` keeps the canvas crisp on window resize.
 - Header status pill polls `/api/health` every 15 s.
 
@@ -305,10 +330,12 @@ Success response (see `frontend/lib/mocks/scenario-1.json` for a full, valid exa
 
 ### 7.5 Mock mode (how the UI runs today)
 
-`NEXT_PUBLIC_API_BASE_URL=mock` (the default) replays the three fixtures in `frontend/lib/mocks/` with
-~900 ms simulated latency. The fixtures are **contract-conformant** — they are the frontend's
-development source of truth and the backend's implementation target. To go live, point the variable at
-the FastAPI service; no component changes are needed.
+`NEXT_PUBLIC_API_BASE_URL=mock` (the default) replays real backend recordings for four scenarios
+(`case-001`–`case-004`) from `frontend/lib/mocks/` with ~1.1 s simulated latency. The recordings are
+**contract v1.1** — recorded from the FastAPI backend, kept in sync with
+`backend/docs/api-contract.md`. Mock `executeAction` remembers freezes per case, so the post-freeze
+follow-up ("Is there any way around this freeze?") replays the after-freeze recording. To go live,
+point the variable at the FastAPI service; no component changes are needed.
 
 ---
 
@@ -318,8 +345,10 @@ the FastAPI service; no component changes are needed.
 |---|---|---|
 | `plan.md` | **This document** — single source of truth | both |
 | `frontend/` | Next.js investigation console (mock-first) | frontend lead |
-| `backend/` | FastAPI agent loop + FalkorDB tool layer + seed generator *(to be created)* | AI/backend lead |
-| `queries/` | Annotated Cypher the product depends on *(submission requirement)* | AI/backend lead |
+| `backend/` | FastAPI agent loop + FalkorDB tool layer + seed generator + 27 tests | AI/backend lead |
+| `backend/docs/api-contract.md` | Authoritative API contract v1.1 + changelog | both |
+| `queries/` | Annotated Cypher the backend runs by name (submission requirement) | AI/backend lead |
+| `render.yaml`, `docker-compose.yml` | Render blueprint + local FalkorDB | AI/backend lead |
 | `.env.example` | Every environment variable across the repo | both |
 
 Frontend internals: `app/` (routes: `/` landing, `/case/[id]` console), `components/` (CaseView,
@@ -341,19 +370,27 @@ npm run dev          # → http://localhost:3000
 Mock mode is the default. Switch to live with `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000` in
 `frontend/.env.local`.
 
-### Backend (to be built in Phase 1)
+### Backend (live in Phase 1 — verified Oct 16)
 
 ```bash
-# FalkorDB — local Docker (preferred for dev)
-docker run -p 6379:6379 -it --rm falkordb/falkordb:latest   # verify exact image tag at build time
+# FalkorDB — Colima (headless Docker runtime) + the repo's compose file
+colima start                             # first run boots a small VM
+docker compose up -d                     # FalkorDB on :6379, Browser on :3080
 
-# Backend
-cd backend && pip install -r requirements.txt
-uvicorn app:app --reload --port 8000
+# Backend (Python 3.11+; a venv already exists at backend/.venv on this machine)
+cd backend
+python3.13 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+cp .env.example .env                     # add LLM_API_KEY for Groq, or leave empty for rule-based mode
+
+python -m seed.load --verify             # rebuild the demo graph, run the 17 ground-truth checks
+uvicorn app.main:app --reload --port 8000
+pytest -q                                # 27 tests (uses graph "ftm_test", never the demo graph)
 ```
 
-> ⚠️ The frontend machine does not have a Docker runtime yet — installing Docker Desktop (or falling
-> back to a FalkorDB Cloud instance while that's set up) is a Phase-1 setup task.
+> Docker note: the frontend machine runs **Colima** (`brew install colima docker docker-compose`)
+> instead of Docker Desktop — no license prompt, CLI-only. Run `docker compose up -d` from the repo
+> root; `colima stop` releases the VM when it is not needed.
 
 ### Environment variables (canonical list in `.env.example`)
 
@@ -399,13 +436,14 @@ Status legend: ✅ done · 🔜 next · ⏳ later. All gates in IST.
 
 Backend lead unless noted:
 
-- [ ] Docker runtime installed (or FalkorDB Cloud instance started) — ⚠️ prerequisite
-- [ ] Seed generator + FalkorDB loader; seed committed for reproducibility
-- [ ] Tool layer: `shared_entities`, `detect_ring`, `money_trail`, `rank_hubs` (+ `layering_scan`)
-- [ ] Agent loop + LLM wiring; `POST /api/investigate` returning the contract shape
-- [ ] `GET /api/health` (db + llm checks)
-- [ ] Frontend ⇄ backend integration: flip `NEXT_PUBLIC_API_BASE_URL`; `case-001` runs live end-to-end
-- [ ] **M1 (Day 2, 21:00): one scenario live end-to-end**
+- [x] Seed generator + FalkorDB loader; seed committed for reproducibility (595 accounts, seed 42, `seed.load --verify` = 17 checks)
+- [x] Tool layer: 11 tools incl. `detect_ring` (WCC), `money_trail` (SPpaths), `rank_hubs`, `layering_scan`, `laundering_capacity`, `plan_minimum_freeze` (min cut on a `GRAPH.COPY` fork)
+- [x] Agent loop + LLM wiring (Groq default, env-configurable) with rule-based fallback; `POST /api/investigate` + SSE + actions/cases/health/report/replay endpoints return the contract shape
+- [x] Contract v1.1 documented (`backend/docs/api-contract.md`) + real fixtures delivered to `frontend/lib/mocks/`
+- [x] Frontend migrated to contract v1.1 (types, mocks, api client, canvas highlights, action execution → snapshot refresh)
+- [x] Docker runtime on the frontend machine — **Colima installed Oct 16** (`brew install colima docker docker-compose`; FalkorDB + Browser via `docker compose up -d`, Browser on :3080)
+- [x] Frontend ⇄ backend integration verified live: `seed.load --verify` 17/17, `pytest` 27/27, headless-browser pass 21/21 (case-001 burst → freeze A47+A52 → follow-up "no route remains"; case-002/003/004)
+- [x] **M1 (Day 2, 21:00): one scenario live end-to-end** — all four scenarios run live; full rehearsal protocol still scheduled before M2
 
 ### Phase 2 — Full demo + actions (Sat Oct 17 · gate **M2 at 21:00** · feature freeze 23:00) ⏳
 
@@ -449,7 +487,7 @@ Status: ✅ locked · 🟡 drafted (awaiting teammate sign-off) · ⏳ deferred.
 | D3 | Stack | 🟡 | FastAPI + Next.js + Cytoscape.js (frontend already scaffolded) |
 | D4 | LLM runtime + provider | 🟡 | Hosted, env-configurable; Gemini free tier first |
 | D5 | Database: dev vs demo | 🟡 | Local Docker per laptop + one FalkorDB Cloud instance; reseed before every demo |
-| D6 | API contract v1 | ✅ | Frozen (§6 of this document) |
+| D6 | API contract | ✅ | v1.1 delivered Oct 16 (`backend/docs/api-contract.md`); recorded responses in `frontend/lib/mocks/`, schema in `backend/openapi.json` |
 | D7 | Responsibilities | 🟡 | Frontend = UI/viz/deploy/video; backend = seed/tools/agent/README tech sections |
 | D8 | Accounts, keys, budget | 🟡 | Each owns accounts; LLM key lives in backend env; $0 spend without agreement |
 | D9 | Integration timing | 🟡 | M1 Day 2 21:00; M2 Day 3 21:00; mock-first in between |
@@ -483,7 +521,7 @@ Rule of thumb: the contract in §6 is the interface. Either side can work alone 
 | LLM flakiness / rate limits during demo | Demo failure | Hosted LLM with env-configurable fallback; frozen fixtures + recorded video as last resort |
 | Render free-tier cold starts (~50 s) | Awkward demo pause | Warm backend before demo; status pill surfaces health; status pill + timeout banner in UI |
 | FalkorDB Cloud: no persistence, idle-stop, deletion after 7 days | Data loss | Local Docker primary; reseed script; seed committed to git — DB is always reproducible |
-| No Docker installed yet (frontend machine) | Blocks Phase 1 setup | Phase-1 first task; Cloud instance as bridge |
+| No Docker installed yet (frontend machine) | Blocks Phase 1 setup | **Resolved Oct 16** — Colima installed (`colima start` + `docker compose up -d`); runbook in §9 |
 | 2-person team, 4-day window | Scope risk | Hard milestone gates (M1–M4); feature freeze Sat 23:00; stretch list explicitly deferred |
 | Machine failure / accidental deletions | Work loss | Push to GitHub regularly (repo is public-submission anyway) |
 | Timezone mixups (deadline 23:59 IST) | Missed deadline | Internal submit target **20:00 IST Sunday** — 4 hours of buffer |
