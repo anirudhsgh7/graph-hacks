@@ -1,0 +1,24 @@
+# Environment & secrets — never commit real values.
+.env
+.env.*
+!.env.example
+
+# Python (backend — teammate's lane)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Node (frontend has its own .gitignore too)
+node_modules/
+.next/
+out/
+build/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Seed ground truth IS committed on purpose (reproducibility) — do not ignore it.
