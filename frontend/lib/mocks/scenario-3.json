@@ -1,0 +1,79 @@
+{
+  "case_id": "case-003",
+  "status": "no_evidence",
+  "summary": "No ring evidence found. M8's volume is genuinely high, but the structure is that of a retail merchant: one-directional inflows from many distinct one-time customers (121 over 90 days), no pass-through timing signature, no shared devices or IPs with any known ring, and no outbound forwarding behavior. The anomaly score reflects volume, not network risk.",
+  "findings": [
+    {
+      "id": "f-6",
+      "title": "No ring evidence found",
+      "detail": "Community structure around M8 is a star of one-time customers, not a dense ring. The layering scan returned 0 hits and the shared-entity pivot found no overlap with known rings. The high anomaly score is explained by merchant volume.",
+      "confidence": 0.8,
+      "evidence_refs": ["ev-7", "ev-8", "ev-9"]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev-7",
+      "type": "community",
+      "tool": "detect_ring",
+      "node_ids": ["M8", "P01", "P02", "P03", "P04", "P05", "P06"],
+      "edge_ids": [],
+      "result_excerpt": { "community_size": 127, "density": 0.02, "one_time_counterparties": 121 }
+    },
+    {
+      "id": "ev-8",
+      "type": "algorithm",
+      "tool": "rank_hubs",
+      "node_ids": ["M8"],
+      "edge_ids": [],
+      "result_excerpt": { "anomaly_score": 0.994, "percentile": 99.4, "note": "volume-based score, not network-based" }
+    },
+    {
+      "id": "ev-9",
+      "type": "pattern",
+      "tool": "layering_scan",
+      "node_ids": ["M8"],
+      "edge_ids": [],
+      "result_excerpt": { "rapid_out_after_in": 0, "window_minutes": 60, "fee_pattern_hits": 0 }
+    }
+  ],
+  "proposed_actions": [
+    {
+      "id": "act-5",
+      "type": "dismiss_alert",
+      "label": "Close alert as benign (log reasoning)",
+      "requires_confirmation": true,
+      "evidence_refs": ["ev-7", "ev-9"]
+    }
+  ],
+  "trace": [
+    { "step": 1, "tool": "account_summary", "args": { "account_id": "M8" }, "ok": true, "rows": 1, "duration_ms": 19 },
+    { "step": 2, "tool": "shared_entities", "args": { "account_id": "M8" }, "ok": true, "rows": 2, "duration_ms": 41 },
+    { "step": 3, "tool": "layering_scan", "args": { "account_ids": ["M8"], "window_minutes": 60 }, "ok": true, "rows": 0, "duration_ms": 63 },
+    { "step": 4, "tool": "detect_ring", "args": { "account_ids": ["M8"] }, "ok": true, "rows": 1, "duration_ms": 112 }
+  ],
+  "graph": {
+    "nodes": [
+      { "id": "M8", "label": "Account", "status": "active", "anomaly_score": 0.994, "x_hint": 0.5, "y_hint": 0.5 },
+      { "id": "P01", "label": "Account", "status": "active", "x_hint": 0.1, "y_hint": 0.15 },
+      { "id": "P02", "label": "Account", "status": "active", "x_hint": 0.35, "y_hint": 0.08 },
+      { "id": "P03", "label": "Account", "status": "active", "x_hint": 0.65, "y_hint": 0.08 },
+      { "id": "P04", "label": "Account", "status": "active", "x_hint": 0.9, "y_hint": 0.18 },
+      { "id": "P05", "label": "Account", "status": "active", "x_hint": 0.9, "y_hint": 0.78 },
+      { "id": "P06", "label": "Account", "status": "active", "x_hint": 0.58, "y_hint": 0.92 },
+      { "id": "P07", "label": "Account", "status": "active", "x_hint": 0.22, "y_hint": 0.88 },
+      { "id": "P08", "label": "Account", "status": "active", "x_hint": 0.05, "y_hint": 0.55 }
+    ],
+    "edges": [
+      { "id": "T-3001", "source": "P01", "target": "M8", "type": "TRANSFER", "amount": 220, "ts": "2026-10-10T11:02:00Z" },
+      { "id": "T-3002", "source": "P02", "target": "M8", "type": "TRANSFER", "amount": 85, "ts": "2026-10-10T13:44:00Z" },
+      { "id": "T-3003", "source": "P03", "target": "M8", "type": "TRANSFER", "amount": 410, "ts": "2026-10-11T09:12:00Z" },
+      { "id": "T-3004", "source": "P04", "target": "M8", "type": "TRANSFER", "amount": 150, "ts": "2026-10-11T16:27:00Z" },
+      { "id": "T-3005", "source": "P05", "target": "M8", "type": "TRANSFER", "amount": 65, "ts": "2026-10-12T10:03:00Z" },
+      { "id": "T-3006", "source": "P06", "target": "M8", "type": "TRANSFER", "amount": 990, "ts": "2026-10-12T14:39:00Z" },
+      { "id": "T-3007", "source": "P07", "target": "M8", "type": "TRANSFER", "amount": 340, "ts": "2026-10-13T11:11:00Z" },
+      { "id": "T-3008", "source": "P08", "target": "M8", "type": "TRANSFER", "amount": 510, "ts": "2026-10-13T18:20:00Z" }
+    ]
+  },
+  "meta": { "model": "mock (scenario-3)", "tool_iterations": 4, "latency_ms": 4900 }
+}

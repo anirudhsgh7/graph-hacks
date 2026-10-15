@@ -1,0 +1,104 @@
+{
+  "case_id": "case-002",
+  "status": "complete",
+  "summary": "The missing $9,800 left C42 and moved through a 4-hop pass-through chain (C42 → A91 → A33 → A75 → H1), losing ≈4% per hop and completing inside 27 minutes. H1 is the terminal hub — it ranks #3 by PageRank influence on TRANSFER edges and also appears in case-001's cash-out infrastructure. Recommended: freeze the four chain accounts; the simulation shows this chain's capacity dropping to zero, but H1 will source from other feeders.",
+  "findings": [
+    {
+      "id": "f-3",
+      "title": "Structured pass-through chain detected",
+      "detail": "Funds move C42 → A91 → A33 → A75 → H1 with each hop under 27 minutes — a classic layering pattern, not normal customer behavior.",
+      "confidence": 0.89,
+      "evidence_refs": ["ev-4"]
+    },
+    {
+      "id": "f-4",
+      "title": "Fee-shaving signature (≈4% per hop)",
+      "detail": "Each hop retains 3.5–4.3% of the amount — consistent with an automated laundering pipeline rather than manual transfers.",
+      "confidence": 0.84,
+      "evidence_refs": ["ev-4"]
+    },
+    {
+      "id": "f-5",
+      "title": "Terminal hub H1 ranks #3 by influence",
+      "detail": "H1 is a top-5 PageRank account and is linked to case-001's ring infrastructure — likely shared cash-out infrastructure across rings.",
+      "confidence": 0.78,
+      "evidence_refs": ["ev-5", "ev-6"]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev-4",
+      "type": "path",
+      "tool": "money_trail",
+      "node_ids": ["C42", "A91", "A33", "A75", "H1"],
+      "edge_ids": ["T-2001", "T-2010", "T-2020", "T-2030"],
+      "result_excerpt": {
+        "hops": 4,
+        "path_weight": 36910,
+        "fee_pattern_pct": 4.1,
+        "max_hop_gap_minutes": 27
+      }
+    },
+    {
+      "id": "ev-5",
+      "type": "shared_entities",
+      "tool": "shared_entities",
+      "node_ids": ["A91", "A33", "D-31"],
+      "edge_ids": ["E-2101", "E-2102"],
+      "result_excerpt": { "shared_devices": 1, "linked_accounts": 2 }
+    },
+    {
+      "id": "ev-6",
+      "type": "algorithm",
+      "tool": "rank_hubs",
+      "node_ids": ["H1"],
+      "edge_ids": [],
+      "result_excerpt": { "rank": 3, "score": 0.041, "algorithm": "algo.pageRank('Account','TRANSFER')" }
+    }
+  ],
+  "proposed_actions": [
+    {
+      "id": "act-3",
+      "type": "freeze_accounts",
+      "label": "Freeze the 4-account chain",
+      "requires_confirmation": true,
+      "evidence_refs": ["ev-4"],
+      "simulation": { "capacity_before": 9800, "capacity_after": 0, "residual_routes": [] }
+    },
+    {
+      "id": "act-4",
+      "type": "export_case_report",
+      "label": "Export evidence-linked case report",
+      "requires_confirmation": false,
+      "evidence_refs": ["ev-4", "ev-5", "ev-6"]
+    }
+  ],
+  "trace": [
+    { "step": 1, "tool": "account_summary", "args": { "account_id": "C42" }, "ok": true, "rows": 1, "duration_ms": 22 },
+    { "step": 2, "tool": "money_trail", "args": { "src": "C42", "dst": "H1", "maxLen": 6, "pathCount": 3 }, "ok": true, "rows": 1, "duration_ms": 74 },
+    { "step": 3, "tool": "shared_entities", "args": { "account_id": "A91" }, "ok": true, "rows": 3, "duration_ms": 38 },
+    { "step": 4, "tool": "rank_hubs", "args": { "limit": 10 }, "ok": true, "rows": 10, "duration_ms": 96 }
+  ],
+  "graph": {
+    "nodes": [
+      { "id": "C42", "label": "Account", "status": "active", "anomaly_score": 0.31, "x_hint": 0.05, "y_hint": 0.52 },
+      { "id": "A91", "label": "Account", "status": "active", "anomaly_score": 0.72, "x_hint": 0.27, "y_hint": 0.3 },
+      { "id": "A33", "label": "Account", "status": "active", "anomaly_score": 0.77, "x_hint": 0.5, "y_hint": 0.62 },
+      { "id": "A75", "label": "Account", "status": "active", "anomaly_score": 0.69, "x_hint": 0.72, "y_hint": 0.34 },
+      { "id": "H1", "label": "Account", "status": "active", "anomaly_score": 0.9, "x_hint": 0.94, "y_hint": 0.52 },
+      { "id": "D-31", "label": "Device", "x_hint": 0.4, "y_hint": 0.14 }
+    ],
+    "edges": [
+      { "id": "T-2001", "source": "C42", "target": "A91", "type": "TRANSFER", "amount": 9800, "ts": "2026-10-14T21:02:00Z" },
+      { "id": "T-2010", "source": "A91", "target": "A33", "type": "TRANSFER", "amount": 9410, "ts": "2026-10-14T21:19:00Z" },
+      { "id": "T-2020", "source": "A33", "target": "A75", "type": "TRANSFER", "amount": 9030, "ts": "2026-10-14T21:41:00Z" },
+      { "id": "T-2030", "source": "A75", "target": "H1", "type": "TRANSFER", "amount": 8670, "ts": "2026-10-14T22:04:00Z" },
+      { "id": "E-2101", "source": "A91", "target": "D-31", "type": "USED_DEVICE" },
+      { "id": "E-2102", "source": "A33", "target": "D-31", "type": "USED_DEVICE" }
+    ],
+    "highlight": {
+      "paths": [["C42", "A91", "A33", "A75", "H1"]]
+    }
+  },
+  "meta": { "model": "mock (scenario-2)", "tool_iterations": 4, "latency_ms": 6100 }
+}

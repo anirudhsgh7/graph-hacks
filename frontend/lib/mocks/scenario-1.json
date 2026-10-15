@@ -1,0 +1,115 @@
+{
+  "case_id": "case-001",
+  "status": "complete",
+  "summary": "A17 heads a 7-account mule ring. Transfers funnel through A22 and A31 to the cash-out hub H3; the ring's estimated throughput is $48,200/day. Recommended: freeze the 7 ring accounts — the simulation shows capacity collapsing to ~$3,900/day, with one residual route via A52 → A77 → H3.",
+  "findings": [
+    {
+      "id": "f-1",
+      "title": "Mule ring detected (7 accounts)",
+      "detail": "A17, A22, A31, A47, A52, A63 and A68 form one densely connected community across transfers, shared devices and shared IPs. 7 of 7 members participate in the pass-through pattern.",
+      "confidence": 0.86,
+      "evidence_refs": ["ev-1", "ev-3"]
+    },
+    {
+      "id": "f-2",
+      "title": "Money trail to cash-out hub H3",
+      "detail": "4-hop path A17 → A22 → A31 → A47 → H3; every hop completes in under 18 minutes and 96% of inflow is forwarded.",
+      "confidence": 0.91,
+      "evidence_refs": ["ev-2"]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev-1",
+      "type": "community",
+      "tool": "detect_ring",
+      "node_ids": ["A17", "A22", "A31", "A47", "A52", "A63", "A68"],
+      "edge_ids": [],
+      "result_excerpt": {
+        "community_size": 7,
+        "seed_nodes_covered": 7,
+        "relationship_types": ["TRANSFER", "USED_DEVICE", "USED_IP"]
+      }
+    },
+    {
+      "id": "ev-2",
+      "type": "path",
+      "tool": "money_trail",
+      "node_ids": ["A17", "A22", "A31", "A47", "H3"],
+      "edge_ids": ["T-1042", "T-1108", "T-1151", "T-1290"],
+      "result_excerpt": { "hops": 4, "path_weight": 48200, "max_hop_gap_minutes": 18 }
+    },
+    {
+      "id": "ev-3",
+      "type": "shared_entities",
+      "tool": "shared_entities",
+      "node_ids": ["A17", "A22", "D-14", "IP-9"],
+      "edge_ids": ["E-2001", "E-2002", "E-2003"],
+      "result_excerpt": { "shared_devices": 1, "shared_ips": 1, "linked_accounts": 6 }
+    }
+  ],
+  "proposed_actions": [
+    {
+      "id": "act-1",
+      "type": "freeze_accounts",
+      "label": "Freeze the 7 ring accounts",
+      "requires_confirmation": true,
+      "evidence_refs": ["ev-1", "ev-2"],
+      "simulation": {
+        "capacity_before": 48200,
+        "capacity_after": 3900,
+        "residual_routes": [["A52", "A77", "H3"]]
+      }
+    },
+    {
+      "id": "act-2",
+      "type": "export_case_report",
+      "label": "Export evidence-linked case report",
+      "requires_confirmation": false,
+      "evidence_refs": ["ev-1", "ev-2", "ev-3"]
+    }
+  ],
+  "trace": [
+    { "step": 1, "tool": "shared_entities", "args": { "account_id": "A17" }, "ok": true, "rows": 8, "duration_ms": 45 },
+    { "step": 2, "tool": "detect_ring", "args": { "account_ids": ["A17", "A22", "A31"] }, "ok": true, "rows": 7, "duration_ms": 130 },
+    { "step": 3, "tool": "money_trail", "args": { "src": "A17", "dst": "H3", "maxLen": 6, "pathCount": 5 }, "ok": true, "rows": 3, "duration_ms": 88 },
+    { "step": 4, "tool": "laundering_capacity", "args": { "entry_ids": ["A17"], "hub_ids": ["H3"] }, "ok": true, "rows": 1, "duration_ms": 210 }
+  ],
+  "graph": {
+    "nodes": [
+      { "id": "A17", "label": "Account", "status": "active", "anomaly_score": 0.93, "x_hint": 0.08, "y_hint": 0.3 },
+      { "id": "A22", "label": "Account", "status": "active", "anomaly_score": 0.88, "x_hint": 0.28, "y_hint": 0.16 },
+      { "id": "A31", "label": "Account", "status": "active", "anomaly_score": 0.85, "x_hint": 0.3, "y_hint": 0.5 },
+      { "id": "A47", "label": "Account", "status": "active", "anomaly_score": 0.71, "x_hint": 0.55, "y_hint": 0.32 },
+      { "id": "A52", "label": "Account", "status": "active", "anomaly_score": 0.66, "x_hint": 0.48, "y_hint": 0.78 },
+      { "id": "A63", "label": "Account", "status": "active", "anomaly_score": 0.64, "x_hint": 0.16, "y_hint": 0.78 },
+      { "id": "A68", "label": "Account", "status": "active", "anomaly_score": 0.6, "x_hint": 0.36, "y_hint": 0.94 },
+      { "id": "A77", "label": "Account", "status": "active", "anomaly_score": 0.45, "x_hint": 0.74, "y_hint": 0.8 },
+      { "id": "H3", "label": "Account", "status": "active", "anomaly_score": 0.88, "x_hint": 0.95, "y_hint": 0.34 },
+      { "id": "D-14", "label": "Device", "x_hint": 0.06, "y_hint": 0.1 },
+      { "id": "D-22", "label": "Device", "x_hint": 0.34, "y_hint": 0.68 },
+      { "id": "IP-9", "label": "IPAddress", "x_hint": 0.05, "y_hint": 0.55 }
+    ],
+    "edges": [
+      { "id": "T-1042", "source": "A17", "target": "A22", "type": "TRANSFER", "amount": 4200, "ts": "2026-10-15T09:14:00Z" },
+      { "id": "T-1108", "source": "A22", "target": "A31", "type": "TRANSFER", "amount": 1500, "ts": "2026-10-15T09:26:00Z" },
+      { "id": "T-1151", "source": "A31", "target": "A47", "type": "TRANSFER", "amount": 3800, "ts": "2026-10-15T09:41:00Z" },
+      { "id": "T-1290", "source": "A47", "target": "H3", "type": "TRANSFER", "amount": 7600, "ts": "2026-10-15T09:58:00Z" },
+      { "id": "T-1310", "source": "A22", "target": "A52", "type": "TRANSFER", "amount": 2000, "ts": "2026-10-15T10:05:00Z" },
+      { "id": "T-1320", "source": "A52", "target": "A77", "type": "TRANSFER", "amount": 5100, "ts": "2026-10-15T10:12:00Z" },
+      { "id": "T-1330", "source": "A77", "target": "H3", "type": "TRANSFER", "amount": 4950, "ts": "2026-10-15T10:31:00Z" },
+      { "id": "T-1340", "source": "A63", "target": "A52", "type": "TRANSFER", "amount": 4300, "ts": "2026-10-15T08:57:00Z" },
+      { "id": "T-1350", "source": "A68", "target": "A52", "type": "TRANSFER", "amount": 3600, "ts": "2026-10-15T09:03:00Z" },
+      { "id": "E-2001", "source": "A17", "target": "D-14", "type": "USED_DEVICE" },
+      { "id": "E-2002", "source": "A22", "target": "D-14", "type": "USED_DEVICE" },
+      { "id": "E-2003", "source": "A17", "target": "IP-9", "type": "USED_IP" },
+      { "id": "E-2004", "source": "A63", "target": "D-22", "type": "USED_DEVICE" },
+      { "id": "E-2005", "source": "A68", "target": "D-22", "type": "USED_DEVICE" }
+    ],
+    "highlight": {
+      "paths": [["A17", "A22", "A31", "A47", "H3"]],
+      "communities": [["A17", "A22", "A31", "A47", "A52", "A63", "A68"]]
+    }
+  },
+  "meta": { "model": "mock (scenario-1)", "tool_iterations": 4, "latency_ms": 8400 }
+}
