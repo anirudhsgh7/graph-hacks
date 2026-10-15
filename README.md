@@ -57,8 +57,10 @@ pytest -q                                 # 27 tests against the running FalkorD
 
 Then set `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000` in `frontend/.env.local` (and
 `NEXT_PUBLIC_BACKEND_API_TOKEN` if the backend sets `BACKEND_API_TOKEN`) and restart the dev server.
-The deployed stack: frontend on Vercel, backend on Render (`render.yaml`), database on
-FalkorDB Cloud (reseeded before every demo).
+The deployed stack is **live**: frontend on **Vercel** (`graph-hacks-cyan.vercel.app`), backend on
+**Render** (`render.yaml`; `follow-the-money-api.onrender.com`), database on **FalkorDB Cloud**.
+Reseed before every demo — the protocol (and the `set -a` caveat) is in `plan.md` §10; cloud
+credentials live in the git-ignored `backend/.env.cloud`.
 
 ## AI-assistant disclosure (hackathon rule 11)
 

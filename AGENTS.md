@@ -28,6 +28,8 @@ Backend (run inside `backend/`; FalkorDB via Colima + the repo's `docker-compose
 - `uvicorn app.main:app --reload --port 8000` — the API (CORS defaults to `http://localhost:3000`, `backend/.env` adds `:3100`)
 - `pytest -q` — 27 tests; needs the running FalkorDB (uses graph `ftm_test`, never the demo graph)
 
+Hosted demo (deployed): Vercel `graph-hacks-cyan.vercel.app` ⟷ Render `follow-the-money-api.onrender.com` ⟷ FalkorDB Cloud. Reseed the cloud DB with `set -a; source .env.cloud; set +a` then `python -m seed.load --verify` (the `set -a` is required — without it the seed silently hits localhost); full protocol in `plan.md` §10.
+
 ## Next.js 16 quirks (this version is newer than LLM training data)
 
 - Read `frontend/node_modules/next/dist/docs/` before writing Next.js code — APIs and conventions differ from older releases.

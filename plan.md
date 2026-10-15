@@ -408,14 +408,20 @@ pytest -q                                # 27 tests (uses graph "ftm_test", neve
 
 | Piece | Where | Notes |
 |---|---|---|
-| Frontend | **Vercel** (Hobby) | must live under a **personal** GitHub account (Hobby cannot deploy org repos); root directory `frontend/`; set `NEXT_PUBLIC_API_BASE_URL` env var |
-| Backend | **Render** (free tier) | cold starts of ~50 s after idle — warm it up before any demo; the status pill exposes health |
-| Database | **local Docker** (primary) + **FalkorDB Cloud free tier** (secondary) | Cloud limits (verified): 100 MB, no TLS, **no persistence/backups**, stopped after 1 day idle, deleted after 7 days → never the only copy of anything |
+| Frontend | **Vercel** (Hobby) — live at `graph-hacks-cyan.vercel.app` | root directory `frontend/`; env: `NEXT_PUBLIC_API_BASE_URL` + `NEXT_PUBLIC_BACKEND_API_TOKEN` (rebuild needed after any change) |
+| Backend | **Render** (free tier) — live at `follow-the-money-api.onrender.com` | cold start ~50 s after ~15 min idle — warm before any demo; `BACKEND_API_TOKEN` is Render-generated; CORS allows the Vercel origin |
+| Database | **FalkorDB Cloud free tier** (AWS ap-south-1; credentials in `backend/.env.cloud`, git-ignored) + **local Docker** for dev | Cloud limits: 100 MB, no TLS, no backups, stopped after 1 day idle, deleted after 7 days → the seed is committed, so the DB is always reproducible |
 
 **Demo-day protocol (repeat before every rehearsal and the real run):**
 
-1. Reseed the database (`python seed.py`) — never demo on mutated state.
-2. Warm the backend (hit `/api/health`), confirm the status pill is green.
+1. **Reseed the cloud database** — never demo on mutated state:
+   ```bash
+   cd backend
+   set -a; source .env.cloud; set +a    # `set -a` matters: without it the seed silently falls back to localhost
+   python -m seed.load --verify         # 17/17 checks, ~10 s
+   ```
+2. **Warm the backend** — `curl -s https://follow-the-money-api.onrender.com/api/health` until `db: ok`
+   (~50 s if asleep), then confirm the status pill is green at `graph-hacks-cyan.vercel.app`.
 3. Walk scenarios 1 → 2 → 3; fall back to the **recorded demo video** if the live stack misbehaves.
 
 ---
