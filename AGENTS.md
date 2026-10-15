@@ -15,7 +15,7 @@
 
 Frontend (run inside `frontend/`):
 
-- `npm run dev` — Turbopack dev server on :3000 (use `-- -p 3001` when FalkorDB Browser has :3000)
+- `npm run dev` — Turbopack dev server on :3000 (FalkorDB Browser is remapped to :3080 in `docker-compose.yml`)
 - `npm run build` — production build; also runs the typecheck
 - `npx tsc --noEmit` — fast standalone typecheck
 - `npm run lint` — ESLint (the script calls `eslint` directly; there is no `next lint` in Next 16)
@@ -26,9 +26,16 @@ Backend (run inside `backend/`; FalkorDB via Colima + the repo's `docker-compose
 - `colima start && docker compose up -d` (repo root) — FalkorDB on `:6379`, Browser on `:3080`
 - `python -m seed.load --verify` — rebuild the demo graph + 17 ground-truth checks
 - `uvicorn app.main:app --reload --port 8000` — the API (CORS defaults to `http://localhost:3000`, `backend/.env` adds `:3100`)
-- `pytest -q` — 27 tests; needs the running FalkorDB (uses graph `ftm_test`, never the demo graph)
+- `pytest -q` — 28 tests; needs the running FalkorDB (uses graph `ftm_test`, never the demo graph)
 
-Hosted demo (deployed): Vercel `graph-hacks-cyan.vercel.app` ⟷ Render `follow-the-money-api.onrender.com` ⟷ FalkorDB Cloud. Reseed the cloud DB with `set -a; source .env.cloud; set +a` then `python -m seed.load --verify` (the `set -a` is required — without it the seed silently hits localhost); full protocol in `plan.md` §10.
+Hosted demo (deployed): Vercel `graph-hacks-cyan.vercel.app` ⟷ Render `follow-the-money-api.onrender.com` ⟷ FalkorDB Cloud. Reseed the cloud DB with `set -a; source .env.cloud; set +a` then `python -m seed.load --verify` (the `set -a` is required — without it the seed silently hits localhost); full protocol in `plan.md` §10. Render pins the LLM config as well — `LLM_BASE_URL`/`LLM_MODEL` carry Groq values in `render.yaml`, and `LLM_API_KEY` is `sync: false` (dashboard-set); switching providers there means overriding all three.
+
+## Backend: deterministic by default, LLM optional
+
+- With `LLM_API_KEY` set, the model drives tool choice in `backend/agent/loop.py` (defaults: Groq, `openai/gpt-oss-120b` — see `backend/.env.example`); without it a deterministic planner runs the same query layer (`meta.mode: rule_based`). Both serve the same API contract.
+- Loop invariants — don't regress them: findings must cite valid evidence, the graph-measured verdict overrides the model's, and *any* LLM failure (rate limit, outage, invalid answer) discards the partial run so the full deterministic investigator completes it. Never ship partial findings.
+- Groq's free tier caps every chat model at ~8K tokens/min; one investigation needs ~20–30K in a burst, so it always falls back mid-loop. Don't expect LLM narration from a free key — it costs ~2 s per question and nothing else.
+- `backend/tests/test_agent_llm.py` drives the loop against a scripted fake OpenAI-compatible server (`tests/fake_llm.py`) — no real key needed; extend those cases when touching the loop.
 
 ## Next.js 16 quirks (this version is newer than LLM training data)
 
@@ -68,3 +75,4 @@ Hosted demo (deployed): Vercel `graph-hacks-cyan.vercel.app` ⟷ Render `follow-
 
 - Small, scoped commits (one concern each); prefer explicit paths over `git add .` — check `git status` first.
 - Keep `.env.example` updated when adding variables; never commit real keys (`.env*` is gitignored except the examples).
+- `main` is production: pushes deploy Render (API) and Vercel (frontend) — the judged demo. Keep main demo-ready, and reseed the cloud DB before any rehearsal or demo (`plan.md` §10).
