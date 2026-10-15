@@ -1,0 +1,33 @@
+# Render blueprint for the backend (free web service).
+# The repo root is checked out so backend/ can read ../queries/*.cypher.
+services:
+  - type: web
+    name: follow-the-money-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: FALKORDB_HOST
+        sync: false
+      - key: FALKORDB_PORT
+        sync: false
+      - key: FALKORDB_USERNAME
+        value: falkordb
+      - key: FALKORDB_PASSWORD
+        sync: false
+      - key: FALKORDB_TLS
+        value: "false"
+      - key: LLM_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: LLM_MODEL
+        value: openai/gpt-oss-120b
+      - key: LLM_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: BACKEND_API_TOKEN
+        generateValue: true

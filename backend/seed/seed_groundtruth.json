@@ -1,0 +1,68 @@
+{
+  "seed": 42,
+  "rings": {
+    "1": [
+      "A17",
+      "A22",
+      "A31",
+      "A47",
+      "A52",
+      "A63",
+      "A68"
+    ],
+    "2": [
+      "A91",
+      "A33",
+      "A75"
+    ],
+    "3": [
+      "A12",
+      "A26",
+      "A39",
+      "A58",
+      "A64"
+    ]
+  },
+  "hubs": {
+    "1": "H3",
+    "2": "H1",
+    "3": "H5"
+  },
+  "exit": "X9",
+  "ring1_entries": [
+    "A17",
+    "A63",
+    "A68"
+  ],
+  "ring1_bypass_account": "A77",
+  "ring1_capacity_to_H3": 30100.0,
+  "ring1_minimum_freeze": [
+    "A47",
+    "A52"
+  ],
+  "c42_chain": [
+    "C42",
+    "A91",
+    "A33",
+    "A75",
+    "H1"
+  ],
+  "c42_chain_minutes": 26,
+  "benign_clusters": {
+    "family": [
+      "A95",
+      "A96",
+      "A97",
+      "A98"
+    ],
+    "merchant": [
+      "M8"
+    ]
+  },
+  "burst": {
+    "account": "A17",
+    "transfers": 14,
+    "recipients": 12,
+    "minutes": 116
+  }
+}

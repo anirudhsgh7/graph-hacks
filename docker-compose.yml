@@ -1,0 +1,16 @@
+# Local FalkorDB: server on 6379, FalkorDB Browser on http://localhost:3080.
+# The Browser defaults to 3000, but that is the Next.js dev server's port on this
+# machine — the host mapping below avoids the clash (container port stays 3000).
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    ports:
+      - "6379:6379"
+      - "3080:3000"
+    environment:
+      - REDIS_ARGS=--appendonly yes
+    volumes:
+      - falkordb-data:/var/lib/falkordb/data
+
+volumes:
+  falkordb-data:
