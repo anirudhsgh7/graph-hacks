@@ -1,0 +1,837 @@
+{
+  "investigation_id": "inv-942ac1f1",
+  "case_id": "case-002",
+  "question": "Follow the $9,800 from C42.",
+  "created_at": "2026-10-15T17:48:20Z",
+  "status": "complete",
+  "conclusion": "suspicious",
+  "summary": "A 3-account mule ring (A33, A75 and A91) shares 1 device and passes money on within about 9 minutes; the $9,800 from C42 was passed through A91, A33 and A75 to H1 in 26 minutes; up to $18,240 can reach H1; freezing just A75 cuts every route (proven on a copy of the graph).",
+  "findings": [
+    {
+      "id": "f-1",
+      "title": "Mule ring detected (3 accounts)",
+      "detail": "A33, A75 and A91 share 1 device and 1 IP address, pass on 96% of what they receive, typically 9 minutes after it arrives.",
+      "confidence": 0.9,
+      "evidence_refs": [
+        "ev-5"
+      ]
+    },
+    {
+      "id": "f-2",
+      "title": "Funds traced from C42 to H1 (4 hops)",
+      "detail": "C42 -> A91 -> A33 -> A75 -> H1: $9,800 became $8,790 in 26 minutes, 3.5-3.6% skimmed at every hop - the pattern of a paid mule chain.",
+      "confidence": 0.9,
+      "evidence_refs": [
+        "ev-4"
+      ]
+    },
+    {
+      "id": "f-3",
+      "title": "Laundering capacity: $18,240",
+      "detail": "Maximum money that can flow from A91 to H1 over the observed transfers (max-flow).",
+      "confidence": 0.85,
+      "evidence_refs": [
+        "ev-6"
+      ]
+    },
+    {
+      "id": "f-4",
+      "title": "Freezing 1 account stops every route: A75",
+      "detail": "Minimum cut between A91 and H1, proven on a copy of the graph: capacity $18,240 -> $0, 0 routes left.",
+      "confidence": 0.95,
+      "evidence_refs": [
+        "ev-7"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev-1",
+      "type": "profile",
+      "tool": "account_profile",
+      "node_ids": [
+        "C42"
+      ],
+      "edge_ids": [],
+      "result_excerpt": {
+        "anomaly_score": 0.269,
+        "anomaly_rank": 463,
+        "anomaly_top_pct": 77.8,
+        "forwarded_within_60_min_share": 0.003,
+        "median_minutes_money_stays": 4007.0,
+        "distinct_senders": 12,
+        "one_time_sender_share": 1.0,
+        "type": "personal"
+      },
+      "receipts": [
+        {
+          "query": "account_profile",
+          "params": {
+            "id": "C42"
+          },
+          "cypher": "MATCH (c:Customer)-[:OWNS]->(a:Account {id: $id})\nOPTIONAL MATCH (a)-[o:TRANSFER]->(r:Account)\nWITH c, a, count(o) AS out_count, sum(o.amount) AS out_total, count(DISTINCT r) AS out_counterparties\nOPTIONAL MATCH (s:Account)-[i:TRANSFER]->(a)\nRETURN a.id AS id, a.type AS type, a.status AS status, a.opened_at AS opened_at,\n       a.country AS country, a.anomaly_score AS anomaly_score, c.id AS customer_id, c.name AS owner,\n       out_count, out_total, out_counterparties,\n       count(i) AS in_count, sum(i.amount) AS in_total, count(DISTINCT s) AS in_counterparties"
+        },
+        {
+          "query": "anomaly_rank",
+          "params": {
+            "score": 0.269
+          },
+          "cypher": "MATCH (b:Account)\nRETURN count(b) AS total, sum(CASE WHEN b.anomaly_score > $score THEN 1 ELSE 0 END) AS higher"
+        },
+        {
+          "query": "inbound_sender_repeats",
+          "params": {
+            "id": "C42"
+          },
+          "cypher": "MATCH (s:Account)-[i:TRANSFER]->(a:Account {id: $id})\nRETURN s.id AS sender, count(i) AS times, sum(i.amount) AS total"
+        }
+      ]
+    },
+    {
+      "id": "ev-2",
+      "type": "shared_entities",
+      "tool": "shared_infrastructure",
+      "node_ids": [
+        "C42"
+      ],
+      "edge_ids": [],
+      "result_excerpt": {
+        "linked_accounts": 0,
+        "shared_devices": 0,
+        "shared_ips": 0
+      },
+      "receipts": [
+        {
+          "query": "shared_infrastructure",
+          "params": {
+            "id": "C42"
+          },
+          "cypher": "MATCH (a:Account {id: $id})-[:USED_DEVICE|USED_IP]->(x)<-[:USED_DEVICE|USED_IP]-(b:Account)\nWHERE b.id <> $id\nRETURN b.id AS account, labels(x)[0] AS via_kind, x.id AS via_id\nORDER BY account, via_id"
+        }
+      ]
+    },
+    {
+      "id": "ev-3",
+      "type": "community",
+      "tool": "detect_ring",
+      "node_ids": [
+        "C42"
+      ],
+      "edge_ids": [],
+      "result_excerpt": {
+        "community_size": 1,
+        "verdict": "no_ring",
+        "shared_devices": 0,
+        "shared_ips": 0,
+        "seed_nodes_covered": 1
+      },
+      "receipts": [
+        {
+          "query": "infrastructure_components",
+          "params": {
+            "ids": [
+              "C42"
+            ]
+          },
+          "cypher": "CALL algo.WCC({nodeLabels: ['Account', 'Device', 'IPAddress'], relationshipTypes: ['USED_DEVICE', 'USED_IP']})\nYIELD node, componentId\nWITH node, componentId\nWHERE 'Account' IN labels(node)\nWITH componentId, collect(node.id) AS members\nWHERE any(m IN members WHERE m IN $ids)\nRETURN componentId, members"
+        }
+      ]
+    },
+    {
+      "id": "ev-4",
+      "type": "path",
+      "tool": "follow_funds",
+      "node_ids": [
+        "C42",
+        "A91",
+        "A33",
+        "A75",
+        "H1"
+      ],
+      "edge_ids": [
+        "T-08086",
+        "T-08088",
+        "T-08091",
+        "T-08096"
+      ],
+      "result_excerpt": {
+        "hops": 4,
+        "quality": "strong",
+        "minutes_total": 26.0,
+        "start_amount": 9800.0,
+        "end_amount": 8790.0,
+        "end_account": "H1",
+        "fee_per_hop_pct": {
+          "min": 3.47,
+          "max": 3.62
+        }
+      },
+      "receipts": [
+        {
+          "query": "largest_outflow",
+          "params": {
+            "id": "C42"
+          },
+          "cypher": "MATCH (a:Account {id: $id})-[t:TRANSFER]->(b:Account)\nRETURN b.id AS dst, t.id AS id, t.amount AS amount, t.ts AS ts\nORDER BY amount DESC, ts DESC\nLIMIT 1"
+        },
+        {
+          "query": "onward_transfers",
+          "params": {
+            "id": "A91",
+            "after": 1791986700000,
+            "until": 1791990300000,
+            "max_amount": 9800.0,
+            "min_amount": 8330.0
+          },
+          "cypher": "MATCH (a:Account {id: $id})-[t:TRANSFER]->(b:Account)\nWHERE t.ts > $after AND t.ts <= $until AND t.amount <= $max_amount AND t.amount >= $min_amount\nRETURN b.id AS dst, b.type AS dst_type, t.id AS id, t.amount AS amount, t.ts AS ts\nORDER BY amount DESC, ts ASC"
+        },
+        {
+          "query": "onward_transfers",
+          "params": {
+            "id": "A33",
+            "after": 1791987180000,
+            "until": 1791990780000,
+            "max_amount": 9460.0,
+            "min_amount": 8041.0
+          },
+          "cypher": "MATCH (a:Account {id: $id})-[t:TRANSFER]->(b:Account)\nWHERE t.ts > $after AND t.ts <= $until AND t.amount <= $max_amount AND t.amount >= $min_amount\nRETURN b.id AS dst, b.type AS dst_type, t.id AS id, t.amount AS amount, t.ts AS ts\nORDER BY amount DESC, ts ASC"
+        },
+        {
+          "query": "onward_transfers",
+          "params": {
+            "id": "A75",
+            "after": 1791987720000,
+            "until": 1791991320000,
+            "max_amount": 9120.0,
+            "min_amount": 7752.0
+          },
+          "cypher": "MATCH (a:Account {id: $id})-[t:TRANSFER]->(b:Account)\nWHERE t.ts > $after AND t.ts <= $until AND t.amount <= $max_amount AND t.amount >= $min_amount\nRETURN b.id AS dst, b.type AS dst_type, t.id AS id, t.amount AS amount, t.ts AS ts\nORDER BY amount DESC, ts ASC"
+        },
+        {
+          "query": "onward_transfers",
+          "params": {
+            "id": "H1",
+            "after": 1791988260000,
+            "until": 1791991860000,
+            "max_amount": 8790.0,
+            "min_amount": 7471.5
+          },
+          "cypher": "MATCH (a:Account {id: $id})-[t:TRANSFER]->(b:Account)\nWHERE t.ts > $after AND t.ts <= $until AND t.amount <= $max_amount AND t.amount >= $min_amount\nRETURN b.id AS dst, b.type AS dst_type, t.id AS id, t.amount AS amount, t.ts AS ts\nORDER BY amount DESC, ts ASC"
+        }
+      ]
+    },
+    {
+      "id": "ev-5",
+      "type": "community",
+      "tool": "detect_ring",
+      "node_ids": [
+        "A33",
+        "A75",
+        "A91",
+        "D-911",
+        "IP-911"
+      ],
+      "edge_ids": [
+        "T-06810",
+        "T-06812",
+        "T-07537",
+        "T-07541",
+        "T-08088",
+        "T-08091"
+      ],
+      "result_excerpt": {
+        "community_size": 3,
+        "verdict": "mule_ring",
+        "pass_through_ratio": 0.963,
+        "median_forward_minutes": 9.0,
+        "shared_devices": 1,
+        "shared_ips": 1,
+        "seed_nodes_covered": 3,
+        "entry_points": [
+          "A91"
+        ],
+        "cashout_candidates": [
+          "H1"
+        ]
+      },
+      "receipts": [
+        {
+          "query": "infrastructure_components",
+          "params": {
+            "ids": [
+              "A91",
+              "A33",
+              "A75"
+            ]
+          },
+          "cypher": "CALL algo.WCC({nodeLabels: ['Account', 'Device', 'IPAddress'], relationshipTypes: ['USED_DEVICE', 'USED_IP']})\nYIELD node, componentId\nWITH node, componentId\nWHERE 'Account' IN labels(node)\nWITH componentId, collect(node.id) AS members\nWHERE any(m IN members WHERE m IN $ids)\nRETURN componentId, members"
+        },
+        {
+          "query": "shared_infrastructure_among",
+          "params": {
+            "ids": [
+              "A33",
+              "A75",
+              "A91"
+            ]
+          },
+          "cypher": "MATCH (a:Account)-[:USED_DEVICE|USED_IP]->(x)<-[:USED_DEVICE|USED_IP]-(b:Account)\nWHERE a.id IN $ids AND b.id IN $ids AND a.id < b.id\nRETURN a.id AS a, b.id AS b, labels(x)[0] AS via_kind, x.id AS via_id"
+        },
+        {
+          "query": "account_transfers",
+          "params": {
+            "ids": [
+              "A33",
+              "A75",
+              "A91"
+            ]
+          },
+          "cypher": "MATCH (a:Account)-[t:TRANSFER]->(b:Account)\nWHERE a.id IN $ids OR b.id IN $ids\nRETURN a.id AS src, b.id AS dst, t.id AS id, t.amount AS amount, t.ts AS ts\nORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": "ev-6",
+      "type": "capacity",
+      "tool": "laundering_capacity",
+      "node_ids": [
+        "A91",
+        "H1",
+        "A33",
+        "A75"
+      ],
+      "edge_ids": [],
+      "result_excerpt": {
+        "capacity": 18240.0,
+        "engine": "python",
+        "entry_ids": [
+          "A91"
+        ],
+        "hub_ids": [
+          "H1"
+        ],
+        "flow_pairs": [
+          [
+            "A33",
+            "A75"
+          ],
+          [
+            "A75",
+            "H1"
+          ],
+          [
+            "A91",
+            "A33"
+          ]
+        ]
+      },
+      "receipts": [
+        {
+          "query": "flow_edge_count",
+          "params": {},
+          "cypher": "MATCH (:Account)-[f:FLOWS_TO]->(:Account)\nRETURN count(f) AS total"
+        }
+      ]
+    },
+    {
+      "id": "ev-7",
+      "type": "freeze_plan",
+      "tool": "plan_minimum_freeze",
+      "node_ids": [
+        "A75",
+        "A91",
+        "H1"
+      ],
+      "edge_ids": [],
+      "result_excerpt": {
+        "recommended": [
+          "A75"
+        ],
+        "count": 1,
+        "capacity_before": 18240.0,
+        "capacity_after": 0.0,
+        "remaining_paths": 0,
+        "entry_ids": [
+          "A91"
+        ],
+        "hub_ids": [
+          "H1"
+        ],
+        "alternatives": [
+          {
+            "plan": "freeze the alerted account only",
+            "count": 1,
+            "remaining_pct": 0.0
+          },
+          {
+            "plan": "freeze the biggest aggregator (A75)",
+            "count": 1,
+            "remaining_pct": 0.0
+          },
+          {
+            "plan": "freeze every account on the money paths",
+            "count": 3,
+            "remaining_pct": 0.0
+          }
+        ]
+      },
+      "receipts": [
+        {
+          "query": "flow_edge_count",
+          "params": {},
+          "cypher": "MATCH (:Account)-[f:FLOWS_TO]->(:Account)\nRETURN count(f) AS total"
+        },
+        {
+          "query": "counterparty_volumes",
+          "params": {
+            "ids": [
+              "A33",
+              "A75",
+              "A91",
+              "H1"
+            ]
+          },
+          "cypher": "MATCH (a:Account)-[f:FLOWS_TO]-(b:Account)\nWHERE a.id IN $ids\nRETURN a.id AS account, b.id AS counterparty, sum(f.capacity) AS volume"
+        },
+        {
+          "query": "fork_remove_accounts",
+          "params": {
+            "ids": [
+              "A47",
+              "A52",
+              "A75"
+            ]
+          },
+          "cypher": "MATCH (a:Account)\nWHERE a.id IN $ids\nDETACH DELETE a"
+        },
+        {
+          "query": "flow_edge_count",
+          "params": {},
+          "cypher": "MATCH (:Account)-[f:FLOWS_TO]->(:Account)\nRETURN count(f) AS total"
+        }
+      ]
+    }
+  ],
+  "proposed_actions": [
+    {
+      "id": "act-3c040125",
+      "type": "freeze_accounts",
+      "label": "Freeze 1 account (A75) - cuts every route",
+      "account_ids": [
+        "A75"
+      ],
+      "requires_confirmation": true,
+      "evidence_refs": [
+        "ev-7",
+        "ev-6"
+      ],
+      "simulation": {
+        "capacity_before": 18240.0,
+        "capacity_after": 0.0,
+        "residual_routes": [],
+        "remaining_paths": 0,
+        "verified_on": "fork"
+      }
+    },
+    {
+      "id": "act-99e072ea",
+      "type": "flag_accounts",
+      "label": "Flag and watchlist 2 ring accounts",
+      "account_ids": [
+        "A33",
+        "A91"
+      ],
+      "requires_confirmation": true,
+      "evidence_refs": [
+        "ev-5"
+      ],
+      "simulation": null
+    },
+    {
+      "id": "act-46be503e",
+      "type": "export_case_report",
+      "label": "Export case report",
+      "account_ids": [],
+      "requires_confirmation": false,
+      "evidence_refs": [
+        "ev-5",
+        "ev-4",
+        "ev-6",
+        "ev-7"
+      ],
+      "simulation": null
+    }
+  ],
+  "trace": [
+    {
+      "step": 1,
+      "tool": "account_profile",
+      "args": {
+        "account_id": "C42"
+      },
+      "ok": true,
+      "rows": 1,
+      "duration_ms": 18,
+      "headline": "anomaly rank #463 of 595",
+      "evidence_ids": [
+        "ev-1"
+      ],
+      "error": null
+    },
+    {
+      "step": 2,
+      "tool": "shared_infrastructure",
+      "args": {
+        "account_id": "C42"
+      },
+      "ok": true,
+      "rows": 0,
+      "duration_ms": 2,
+      "headline": "0 linked account(s)",
+      "evidence_ids": [
+        "ev-2"
+      ],
+      "error": null
+    },
+    {
+      "step": 3,
+      "tool": "detect_ring",
+      "args": {
+        "account_ids": [
+          "C42"
+        ]
+      },
+      "ok": true,
+      "rows": 0,
+      "duration_ms": 8,
+      "headline": "no shared devices/IPs",
+      "evidence_ids": [
+        "ev-3"
+      ],
+      "error": null
+    },
+    {
+      "step": 4,
+      "tool": "follow_funds",
+      "args": {
+        "account_id": "C42"
+      },
+      "ok": true,
+      "rows": 4,
+      "duration_ms": 10,
+      "headline": "4 hop(s) to H1 in 26 min",
+      "evidence_ids": [
+        "ev-4"
+      ],
+      "error": null
+    },
+    {
+      "step": 5,
+      "tool": "detect_ring",
+      "args": {
+        "account_ids": [
+          "A91",
+          "A33",
+          "A75"
+        ]
+      },
+      "ok": true,
+      "rows": 1,
+      "duration_ms": 20,
+      "headline": "3 accounts - mule ring",
+      "evidence_ids": [
+        "ev-5"
+      ],
+      "error": null
+    },
+    {
+      "step": 6,
+      "tool": "laundering_capacity",
+      "args": {
+        "entry_ids": [
+          "A91"
+        ],
+        "hub_ids": [
+          "H1"
+        ]
+      },
+      "ok": true,
+      "rows": 3,
+      "duration_ms": 458,
+      "headline": "capacity $18,240 (python)",
+      "evidence_ids": [
+        "ev-6"
+      ],
+      "error": null
+    },
+    {
+      "step": 7,
+      "tool": "plan_minimum_freeze",
+      "args": {
+        "entry_ids": [
+          "A91"
+        ],
+        "hub_ids": [
+          "H1"
+        ]
+      },
+      "ok": true,
+      "rows": 3,
+      "duration_ms": 1096,
+      "headline": "freeze A75 -> $0 left",
+      "evidence_ids": [
+        "ev-7"
+      ],
+      "error": null
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {
+        "id": "C42",
+        "label": "Account",
+        "type": "personal",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.269,
+        "x_hint": 0.0,
+        "y_hint": 0.5
+      },
+      {
+        "id": "A75",
+        "label": "Account",
+        "type": "personal",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.414,
+        "x_hint": 0.75,
+        "y_hint": 0.5
+      },
+      {
+        "id": "A91",
+        "label": "Account",
+        "type": "personal",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.407,
+        "x_hint": 0.25,
+        "y_hint": 0.5
+      },
+      {
+        "id": "H1",
+        "label": "Account",
+        "type": "business",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.298,
+        "x_hint": 1.0,
+        "y_hint": 0.5
+      },
+      {
+        "id": "A33",
+        "label": "Account",
+        "type": "personal",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.41,
+        "x_hint": 0.5,
+        "y_hint": 0.5
+      },
+      {
+        "id": "D-911",
+        "label": "Device",
+        "type": null,
+        "kind": "mobile",
+        "status": null,
+        "anomaly_score": null,
+        "x_hint": null,
+        "y_hint": null
+      },
+      {
+        "id": "IP-911",
+        "label": "IPAddress",
+        "type": null,
+        "kind": null,
+        "status": null,
+        "anomaly_score": null,
+        "x_hint": null,
+        "y_hint": null
+      }
+    ],
+    "edges": [
+      {
+        "id": "T-08086",
+        "source": "C42",
+        "target": "A91",
+        "type": "TRANSFER",
+        "amount": 9800.0,
+        "ts": "2026-10-14T14:05:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-06810",
+        "source": "A91",
+        "target": "A33",
+        "type": "TRANSFER",
+        "amount": 4240.0,
+        "ts": "2026-10-12T11:38:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07537",
+        "source": "A91",
+        "target": "A33",
+        "type": "TRANSFER",
+        "amount": 5960.0,
+        "ts": "2026-10-13T16:08:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-08088",
+        "source": "A91",
+        "target": "A33",
+        "type": "TRANSFER",
+        "amount": 9460.0,
+        "ts": "2026-10-14T14:13:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-06812",
+        "source": "A33",
+        "target": "A75",
+        "type": "TRANSFER",
+        "amount": 4080.0,
+        "ts": "2026-10-12T11:47:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07541",
+        "source": "A33",
+        "target": "A75",
+        "type": "TRANSFER",
+        "amount": 5730.0,
+        "ts": "2026-10-13T16:17:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-08091",
+        "source": "A33",
+        "target": "A75",
+        "type": "TRANSFER",
+        "amount": 9120.0,
+        "ts": "2026-10-14T14:22:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-08096",
+        "source": "A75",
+        "target": "H1",
+        "type": "TRANSFER",
+        "amount": 8790.0,
+        "ts": "2026-10-14T14:31:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "U:A91:D-911",
+        "source": "A91",
+        "target": "D-911",
+        "type": "USED_DEVICE",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A91:IP-911",
+        "source": "A91",
+        "target": "IP-911",
+        "type": "USED_IP",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A33:D-911",
+        "source": "A33",
+        "target": "D-911",
+        "type": "USED_DEVICE",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A33:IP-911",
+        "source": "A33",
+        "target": "IP-911",
+        "type": "USED_IP",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A75:D-911",
+        "source": "A75",
+        "target": "D-911",
+        "type": "USED_DEVICE",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A75:IP-911",
+        "source": "A75",
+        "target": "IP-911",
+        "type": "USED_IP",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      }
+    ],
+    "highlight": {
+      "paths": [
+        [
+          "C42",
+          "A91",
+          "A33",
+          "A75",
+          "H1"
+        ]
+      ],
+      "communities": [
+        [
+          "A33",
+          "A75",
+          "A91"
+        ]
+      ],
+      "infrastructure_clusters": [],
+      "freeze_plan": [
+        "A75"
+      ],
+      "flows": [
+        [
+          "A33",
+          "A75"
+        ],
+        [
+          "A75",
+          "H1"
+        ],
+        [
+          "A91",
+          "A33"
+        ]
+      ],
+      "frozen": []
+    }
+  },
+  "meta": {
+    "mode": "rule_based",
+    "model": null,
+    "narrative_source": "deterministic",
+    "tool_iterations": 7,
+    "latency_ms": 1651,
+    "maxflow_engine": "python",
+    "frozen_accounts": [],
+    "notes": []
+  }
+}

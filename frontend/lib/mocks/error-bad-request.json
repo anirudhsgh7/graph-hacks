@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "BAD_REQUEST",
+    "message": "name an account (e.g. A17) or open a case to investigate",
+    "detail": {}
+  }
+}

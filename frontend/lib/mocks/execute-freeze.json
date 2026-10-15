@@ -1,0 +1,24 @@
+{
+  "action_id": "act-1cb431b4",
+  "type": "freeze_accounts",
+  "status": "executed",
+  "affected": [
+    "A47",
+    "A52"
+  ],
+  "graph_delta": {
+    "nodes": [
+      {
+        "id": "A47",
+        "status": "frozen"
+      },
+      {
+        "id": "A52",
+        "status": "frozen"
+      }
+    ],
+    "case": null
+  },
+  "audit_id": "aud-b319746c",
+  "report_url": null
+}

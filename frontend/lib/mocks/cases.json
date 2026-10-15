@@ -1,0 +1,57 @@
+[
+  {
+    "id": "case-001",
+    "title": "Burst of transfers from A17",
+    "alert": "14 transfers from account A17 within 2 hours to 12 different recipients, most of them opened in the last 30 days.",
+    "status": "open",
+    "seed_accounts": [
+      "A17"
+    ],
+    "created_at": "2026-10-14T12:30:00Z",
+    "suggested_questions": [
+      "Who is behind this burst of transfers?",
+      "Where does the money end up?",
+      "What is the smallest freeze that stops it?"
+    ]
+  },
+  {
+    "id": "case-002",
+    "title": "Unauthorized $9,800 debit from C42",
+    "alert": "Customer complaint: $9,800 left account C42 without authorization on Oct 14.",
+    "status": "open",
+    "seed_accounts": [
+      "C42"
+    ],
+    "created_at": "2026-10-14T16:10:00Z",
+    "suggested_questions": [
+      "Follow the $9,800 from C42.",
+      "Who received the money and is it part of a network?"
+    ]
+  },
+  {
+    "id": "case-003",
+    "title": "Top-1% anomaly score: M8",
+    "alert": "Merchant account M8 is in the top 1% of the rules-engine anomaly score (high volume, high degree).",
+    "status": "open",
+    "seed_accounts": [
+      "M8"
+    ],
+    "created_at": "2026-10-14T18:00:00Z",
+    "suggested_questions": [
+      "Is M8 laundering money?"
+    ]
+  },
+  {
+    "id": "case-004",
+    "title": "Shared-device cluster around A95",
+    "alert": "Four accounts (A95-A98) log in from the same tablet and IP address.",
+    "status": "open",
+    "seed_accounts": [
+      "A95"
+    ],
+    "created_at": "2026-10-14T18:20:00Z",
+    "suggested_questions": [
+      "Is the A95 cluster a mule ring?"
+    ]
+  }
+]

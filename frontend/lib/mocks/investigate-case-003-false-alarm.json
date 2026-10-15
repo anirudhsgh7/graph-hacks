@@ -1,0 +1,379 @@
+{
+  "investigation_id": "inv-085e316d",
+  "case_id": "case-003",
+  "question": "Is M8 laundering money?",
+  "created_at": "2026-10-15T17:48:20Z",
+  "status": "no_evidence",
+  "conclusion": "no_evidence",
+  "summary": "No evidence that M8 is laundering money: its top-0.2% legacy score comes from 320 customers who each paid once, it shares no devices or IP addresses with other accounts and no money passes through within the hour.",
+  "findings": [
+    {
+      "id": "f-1",
+      "title": "M8: high score, explained by ordinary activity",
+      "detail": "M8 is a merchant account: its legacy anomaly score ranks #1 (top 0.2%); 320 different senders, 100% of whom paid exactly once (ordinary customers); no incoming payment is passed on within an hour; outgoing settlements go to A101, held by the same customer.",
+      "confidence": 0.8,
+      "evidence_refs": [
+        "ev-1"
+      ]
+    },
+    {
+      "id": "f-2",
+      "title": "No shared devices or IP addresses",
+      "detail": "M8 shares no login infrastructure with any other account.",
+      "confidence": 0.75,
+      "evidence_refs": [
+        "ev-3"
+      ]
+    },
+    {
+      "id": "f-3",
+      "title": "Largest outgoing payment went to A101 and stopped there",
+      "detail": "$6,355 from M8 to A101; it was not passed on to anyone else within the hour.",
+      "confidence": 0.75,
+      "evidence_refs": [
+        "ev-4"
+      ]
+    },
+    {
+      "id": "f-4",
+      "title": "No pass-through activity",
+      "detail": "No payment entered and left M8 within 60 minutes for a similar amount.",
+      "confidence": 0.8,
+      "evidence_refs": [
+        "ev-5"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev-1",
+      "type": "profile",
+      "tool": "account_profile",
+      "node_ids": [
+        "M8",
+        "A101"
+      ],
+      "edge_ids": [],
+      "result_excerpt": {
+        "anomaly_score": 0.769,
+        "anomaly_rank": 1,
+        "anomaly_top_pct": 0.2,
+        "forwarded_within_60_min_share": 0.0,
+        "median_minutes_money_stays": null,
+        "distinct_senders": 320,
+        "one_time_sender_share": 1.0,
+        "type": "merchant"
+      },
+      "receipts": [
+        {
+          "query": "account_profile",
+          "params": {
+            "id": "M8"
+          },
+          "cypher": "MATCH (c:Customer)-[:OWNS]->(a:Account {id: $id})\nOPTIONAL MATCH (a)-[o:TRANSFER]->(r:Account)\nWITH c, a, count(o) AS out_count, sum(o.amount) AS out_total, count(DISTINCT r) AS out_counterparties\nOPTIONAL MATCH (s:Account)-[i:TRANSFER]->(a)\nRETURN a.id AS id, a.type AS type, a.status AS status, a.opened_at AS opened_at,\n       a.country AS country, a.anomaly_score AS anomaly_score, c.id AS customer_id, c.name AS owner,\n       out_count, out_total, out_counterparties,\n       count(i) AS in_count, sum(i.amount) AS in_total, count(DISTINCT s) AS in_counterparties"
+        },
+        {
+          "query": "anomaly_rank",
+          "params": {
+            "score": 0.769
+          },
+          "cypher": "MATCH (b:Account)\nRETURN count(b) AS total, sum(CASE WHEN b.anomaly_score > $score THEN 1 ELSE 0 END) AS higher"
+        },
+        {
+          "query": "inbound_sender_repeats",
+          "params": {
+            "id": "M8"
+          },
+          "cypher": "MATCH (s:Account)-[i:TRANSFER]->(a:Account {id: $id})\nRETURN s.id AS sender, count(i) AS times, sum(i.amount) AS total"
+        }
+      ]
+    },
+    {
+      "id": "ev-2",
+      "type": "shared_entities",
+      "tool": "shared_infrastructure",
+      "node_ids": [
+        "M8"
+      ],
+      "edge_ids": [],
+      "result_excerpt": {
+        "linked_accounts": 0,
+        "shared_devices": 0,
+        "shared_ips": 0
+      },
+      "receipts": [
+        {
+          "query": "shared_infrastructure",
+          "params": {
+            "id": "M8"
+          },
+          "cypher": "MATCH (a:Account {id: $id})-[:USED_DEVICE|USED_IP]->(x)<-[:USED_DEVICE|USED_IP]-(b:Account)\nWHERE b.id <> $id\nRETURN b.id AS account, labels(x)[0] AS via_kind, x.id AS via_id\nORDER BY account, via_id"
+        }
+      ]
+    },
+    {
+      "id": "ev-3",
+      "type": "community",
+      "tool": "detect_ring",
+      "node_ids": [
+        "M8"
+      ],
+      "edge_ids": [],
+      "result_excerpt": {
+        "community_size": 1,
+        "verdict": "no_ring",
+        "shared_devices": 0,
+        "shared_ips": 0,
+        "seed_nodes_covered": 1
+      },
+      "receipts": [
+        {
+          "query": "infrastructure_components",
+          "params": {
+            "ids": [
+              "M8"
+            ]
+          },
+          "cypher": "CALL algo.WCC({nodeLabels: ['Account', 'Device', 'IPAddress'], relationshipTypes: ['USED_DEVICE', 'USED_IP']})\nYIELD node, componentId\nWITH node, componentId\nWHERE 'Account' IN labels(node)\nWITH componentId, collect(node.id) AS members\nWHERE any(m IN members WHERE m IN $ids)\nRETURN componentId, members"
+        }
+      ]
+    },
+    {
+      "id": "ev-4",
+      "type": "path",
+      "tool": "follow_funds",
+      "node_ids": [
+        "M8",
+        "A101"
+      ],
+      "edge_ids": [
+        "T-08303"
+      ],
+      "result_excerpt": {
+        "hops": 1,
+        "quality": "single_transfer",
+        "minutes_total": 0.0,
+        "start_amount": 6355.25,
+        "end_amount": 6355.25,
+        "end_account": "A101",
+        "fee_per_hop_pct": null
+      },
+      "receipts": [
+        {
+          "query": "largest_outflow",
+          "params": {
+            "id": "M8"
+          },
+          "cypher": "MATCH (a:Account {id: $id})-[t:TRANSFER]->(b:Account)\nRETURN b.id AS dst, t.id AS id, t.amount AS amount, t.ts AS ts\nORDER BY amount DESC, ts DESC\nLIMIT 1"
+        },
+        {
+          "query": "onward_transfers",
+          "params": {
+            "id": "A101",
+            "after": 1792020600000,
+            "until": 1792024200000,
+            "max_amount": 6355.25,
+            "min_amount": 5401.9625
+          },
+          "cypher": "MATCH (a:Account {id: $id})-[t:TRANSFER]->(b:Account)\nWHERE t.ts > $after AND t.ts <= $until AND t.amount <= $max_amount AND t.amount >= $min_amount\nRETURN b.id AS dst, b.type AS dst_type, t.id AS id, t.amount AS amount, t.ts AS ts\nORDER BY amount DESC, ts ASC"
+        }
+      ]
+    },
+    {
+      "id": "ev-5",
+      "type": "pattern",
+      "tool": "layering_scan",
+      "node_ids": [
+        "M8"
+      ],
+      "edge_ids": [],
+      "result_excerpt": {
+        "pass_through_patterns": 0,
+        "accounts_with_pattern": 0,
+        "window_minutes": 60
+      },
+      "receipts": [
+        {
+          "query": "layering_pairs",
+          "params": {
+            "ids": [
+              "M8"
+            ],
+            "window_ms": 3600000,
+            "fee_tolerance": 0.1
+          },
+          "cypher": "MATCH (a:Account)-[t1:TRANSFER]->(m:Account)-[t2:TRANSFER]->(b:Account)\nWHERE m.id IN $ids\n  AND t2.ts > t1.ts AND t2.ts - t1.ts <= $window_ms\n  AND t2.amount <= t1.amount AND t2.amount >= t1.amount * (1.0 - $fee_tolerance)\n  AND a.id <> b.id\nRETURN a.id AS src, m.id AS via, b.id AS dst, t1.id AS in_id, t2.id AS out_id,\n       t1.amount AS in_amount, t2.amount AS out_amount, (t2.ts - t1.ts) AS gap_ms\nORDER BY gap_ms ASC\nLIMIT 50"
+        }
+      ]
+    }
+  ],
+  "proposed_actions": [
+    {
+      "id": "act-7de40998",
+      "type": "clear_alert",
+      "label": "Close the alert as explained - no laundering evidence",
+      "account_ids": [],
+      "requires_confirmation": true,
+      "evidence_refs": [
+        "ev-1",
+        "ev-3",
+        "ev-4",
+        "ev-5"
+      ],
+      "simulation": null
+    },
+    {
+      "id": "act-0f2e566f",
+      "type": "export_case_report",
+      "label": "Export case report",
+      "account_ids": [],
+      "requires_confirmation": false,
+      "evidence_refs": [
+        "ev-1",
+        "ev-3",
+        "ev-4",
+        "ev-5"
+      ],
+      "simulation": null
+    }
+  ],
+  "trace": [
+    {
+      "step": 1,
+      "tool": "account_profile",
+      "args": {
+        "account_id": "M8"
+      },
+      "ok": true,
+      "rows": 1,
+      "duration_ms": 33,
+      "headline": "anomaly rank #1 of 595",
+      "evidence_ids": [
+        "ev-1"
+      ],
+      "error": null
+    },
+    {
+      "step": 2,
+      "tool": "shared_infrastructure",
+      "args": {
+        "account_id": "M8"
+      },
+      "ok": true,
+      "rows": 0,
+      "duration_ms": 1,
+      "headline": "0 linked account(s)",
+      "evidence_ids": [
+        "ev-2"
+      ],
+      "error": null
+    },
+    {
+      "step": 3,
+      "tool": "detect_ring",
+      "args": {
+        "account_ids": [
+          "M8"
+        ]
+      },
+      "ok": true,
+      "rows": 0,
+      "duration_ms": 7,
+      "headline": "no shared devices/IPs",
+      "evidence_ids": [
+        "ev-3"
+      ],
+      "error": null
+    },
+    {
+      "step": 4,
+      "tool": "follow_funds",
+      "args": {
+        "account_id": "M8"
+      },
+      "ok": true,
+      "rows": 1,
+      "duration_ms": 4,
+      "headline": "1 hop(s) to A101 in 0 min",
+      "evidence_ids": [
+        "ev-4"
+      ],
+      "error": null
+    },
+    {
+      "step": 5,
+      "tool": "layering_scan",
+      "args": {
+        "account_ids": [
+          "M8"
+        ]
+      },
+      "ok": true,
+      "rows": 0,
+      "duration_ms": 3,
+      "headline": "0 pass-through transfer(s)",
+      "evidence_ids": [
+        "ev-5"
+      ],
+      "error": null
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {
+        "id": "M8",
+        "label": "Account",
+        "type": "merchant",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.769,
+        "x_hint": 0.0,
+        "y_hint": 0.5
+      },
+      {
+        "id": "A101",
+        "label": "Account",
+        "type": "personal",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.319,
+        "x_hint": 1.0,
+        "y_hint": 0.5
+      }
+    ],
+    "edges": [
+      {
+        "id": "T-08303",
+        "source": "M8",
+        "target": "A101",
+        "type": "TRANSFER",
+        "amount": 6355.25,
+        "ts": "2026-10-14T23:30:00Z",
+        "channel": "neft"
+      }
+    ],
+    "highlight": {
+      "paths": [
+        [
+          "M8",
+          "A101"
+        ]
+      ],
+      "communities": [],
+      "infrastructure_clusters": [],
+      "freeze_plan": [],
+      "flows": [],
+      "frozen": []
+    }
+  },
+  "meta": {
+    "mode": "rule_based",
+    "model": null,
+    "narrative_source": "deterministic",
+    "tool_iterations": 5,
+    "latency_ms": 64,
+    "maxflow_engine": "python",
+    "frozen_accounts": [],
+    "notes": []
+  }
+}

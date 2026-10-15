@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "ACTION_CONFLICT",
+    "message": "this action has already been executed",
+    "detail": {
+      "action_id": "act-1cb431b4"
+    }
+  }
+}

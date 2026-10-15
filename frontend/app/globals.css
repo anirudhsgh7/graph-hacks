@@ -1,39 +1,265 @@
 @import "tailwindcss";
 
+/* Class-based dark mode — the ThemeProvider toggles `.dark` on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ------------------------------------------------------------------ *
+ * Follow the Money — design tokens
+ *
+ * Single source of truth for color. Components consume these through
+ * the Tailwind utilities registered in `@theme inline` below, so every
+ * surface, control, and status color switches with the theme. The
+ * `--graph-*` tokens are also read at runtime by Cytoscape
+ * (GraphCanvas), which cannot consume CSS variables directly.
+ * ------------------------------------------------------------------ */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces: page → card → raised → inset */
+  --canvas: #f4f5f7;
+  --surface: #ffffff;
+  --raised: #f6f7f9;
+  --inset: #f2f4f7;
+
+  /* Text: primary → secondary → tertiary */
+  --ink: #141b26;
+  --muted: #57627a;
+  --faint: #8791a5;
+
+  /* Borders */
+  --line: #e5e8ee;
+  --line-strong: #cfd5e0;
+
+  /* Accent — refined amber/gold */
+  --accent: #97650a;
+  --accent-soft: #f8efd8;
+  --accent-line: #e9d5a6;
+  --accent-fill: #e2a63d;
+  --accent-fill-hover: #d6982a;
+  --on-accent: #241b06;
+
+  /* Semantic */
+  --ok: #067a55;
+  --ok-soft: #e9f7f1;
+  --ok-line: #bfe8d6;
+  --danger: #b42318;
+  --danger-soft: #fdf0ee;
+  --danger-line: #f3c7c1;
+  --info: #0b6a9c;
+  --info-soft: #edf6fc;
+  --info-line: #bfe0f0;
+
+  /* Elevation */
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 10px 30px -18px rgb(16 24 40 / 0.14);
+  --shadow-float: 0 4px 14px rgb(16 24 40 / 0.1), 0 1px 3px rgb(16 24 40 / 0.06);
+
+  /* Graph — semantic colors preserved across themes */
+  --graph-bg: #fafbfd;
+  --graph-node: #3b82f6;
+  --graph-node-line: #1d4ed8;
+  --graph-node-label: #3d4859;
+  --graph-device: #7c3aed;
+  --graph-device-line: #5b21b6;
+  --graph-ip: #0891b2;
+  --graph-ip-line: #155e75;
+  --graph-frozen: #64748b;
+  --graph-frozen-line: #475569;
+  --graph-edge: #a9b4c6;
+  --graph-edge-label: #6b7688;
+  --graph-dashed: #94a3b8;
+  --graph-trail: #c2730a;
+  --graph-ring: #e11d48;
+  --graph-emphasis: #cf7f08;
+  --graph-cut: #7c3aed;
+  --graph-flow: #0284c7;
+}
+
+:root.dark {
+  color-scheme: dark;
+
+  --canvas: #080b12;
+  --surface: #0e131d;
+  --raised: #141b28;
+  --inset: #0a0f18;
+
+  --ink: #e8ecf4;
+  --muted: #97a2b8;
+  --faint: #67748b;
+
+  --line: #1c2534;
+  --line-strong: #2b3749;
+
+  --accent: #e0b25c;
+  --accent-soft: rgb(224 178 92 / 0.1);
+  --accent-line: rgb(224 178 92 / 0.32);
+  --accent-fill: #d9a844;
+  --accent-fill-hover: #e3b354;
+  --on-accent: #1d1505;
+
+  --ok: #3ecf9a;
+  --ok-soft: rgb(62 207 154 / 0.1);
+  --ok-line: rgb(62 207 154 / 0.3);
+  --danger: #f07a75;
+  --danger-soft: rgb(240 122 117 / 0.1);
+  --danger-line: rgb(240 122 117 / 0.3);
+  --info: #7cc4f0;
+  --info-soft: rgb(124 196 240 / 0.1);
+  --info-line: rgb(124 196 240 / 0.3);
+
+  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.02), 0 14px 36px -28px rgb(0 0 0 / 0.9);
+  --shadow-float: 0 10px 28px rgb(0 0 0 / 0.5);
+
+  --graph-bg: #0a0f18;
+  --graph-node: #4c8dfa;
+  --graph-node-line: #60a5fa;
+  --graph-node-label: #c6cfdd;
+  --graph-device: #a855f7;
+  --graph-device-line: #c084fc;
+  --graph-ip: #22b8dd;
+  --graph-ip-line: #38d0f0;
+  --graph-frozen: #55637a;
+  --graph-frozen-line: #6b7a93;
+  --graph-edge: #39465c;
+  --graph-edge-label: #8b98ad;
+  --graph-dashed: #55637a;
+  --graph-trail: #f0a12c;
+  --graph-ring: #f43f5e;
+  --graph-emphasis: #f5c356;
+  --graph-cut: #a78bfa;
+  --graph-flow: #38bdf8;
+}
+
+/* Register the tokens as Tailwind color utilities (bg-surface, text-muted,
+ * border-line, divide-line, …). `inline` keeps the utilities pointing at the
+ * runtime variables so they flip with the theme. */
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-inset: var(--inset);
+
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-accent-fill: var(--accent-fill);
+  --color-accent-fill-hover: var(--accent-fill-hover);
+  --color-on-accent: var(--on-accent);
+
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-ok-line: var(--ok-line);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-line);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-line: var(--info-line);
+
+  --color-graph-bg: var(--graph-bg);
+  --color-graph-trail: var(--graph-trail);
+  --color-graph-ring: var(--graph-ring);
+  --color-graph-device: var(--graph-device);
+  --color-graph-ip: var(--graph-ip);
+  --color-graph-frozen: var(--graph-frozen);
+  --color-graph-emphasis: var(--graph-emphasis);
+  --color-graph-cut: var(--graph-cut);
+  --color-graph-flow: var(--graph-flow);
 }
 
-:root {
-  --background: #020617;
-  --foreground: #e2e8f0;
-}
+@layer base {
+  body {
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  :where(a, button, summary, [role="button"]):focus-visible {
+    outline: 2px solid var(--accent-fill);
+    outline-offset: 2px;
+  }
 }
 
 /* Small component helpers to keep the JSX readable. */
 @layer components {
   .card {
-    @apply rounded-xl border border-slate-800 bg-slate-900/60 p-4;
+    @apply rounded-xl bg-surface p-4;
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow-card);
   }
+
   .chip {
-    @apply inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-800/60 px-2 py-0.5 text-[11px] text-slate-300;
+    @apply inline-flex items-center gap-1 rounded-full border border-line bg-raised px-2.5 py-0.5 text-[11px] leading-4 text-muted;
   }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium leading-4;
+  }
+  .badge-neutral {
+    @apply border border-line bg-raised text-muted;
+  }
+  .badge-ok {
+    @apply border border-ok-line bg-ok-soft text-ok;
+  }
+  .badge-warn {
+    @apply border border-accent-line bg-accent-soft text-accent;
+  }
+  .badge-danger {
+    @apply border border-danger-line bg-danger-soft text-danger;
+  }
+  .badge-info {
+    @apply border border-info-line bg-info-soft text-info;
+  }
+
   .btn {
-    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm font-medium text-slate-200 transition hover:border-slate-500 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex h-9 cursor-pointer select-none items-center justify-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3.5 text-[13px] font-medium text-ink transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn:hover:where(:not(:disabled)) {
+    @apply bg-raised;
   }
   .btn-primary {
-    @apply border-amber-500/60 bg-amber-500/90 text-slate-950 hover:border-amber-400 hover:bg-amber-400;
+    @apply border-transparent bg-accent-fill text-on-accent;
   }
+  .btn-primary:hover:where(:not(:disabled)) {
+    @apply border-transparent bg-accent-fill-hover text-on-accent;
+  }
+  .btn-icon {
+    @apply w-9 px-0;
+  }
+
   .input {
-    @apply w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500/70 focus:outline-none;
+    @apply h-9 w-full rounded-lg border border-line-strong bg-surface px-3 text-[13px] text-ink transition-[border-color,box-shadow] placeholder:text-faint focus:outline-none;
   }
+  .input:focus {
+    border-color: var(--accent-line);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
   .skeleton {
-    @apply animate-pulse rounded bg-slate-800/80;
+    @apply animate-pulse rounded-md bg-line/70;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.12em] text-faint;
+  }
+
+  .mono-tag {
+    @apply inline-flex items-center rounded-md border border-line bg-raised px-1.5 py-0.5 font-mono text-[11px] leading-4 text-muted;
+  }
+
+  /* The one content container shared by the header and every page, so all
+   * left/right edges line up. Generous gutters at every width. */
+  .app-container {
+    @apply mx-auto w-full max-w-[1200px] px-5 sm:px-8 lg:px-12;
   }
 }

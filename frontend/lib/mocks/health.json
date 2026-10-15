@@ -1,0 +1,18 @@
+{
+  "status": "ok",
+  "db": "ok",
+  "llm": "not_configured",
+  "llm_model": null,
+  "graph": {
+    "accounts": 595,
+    "transfers": 8317
+  },
+  "capabilities": {
+    "maxflow": false,
+    "sppaths": true,
+    "wcc": true,
+    "cdlp": true,
+    "pagerank": true
+  },
+  "version": "1.0.0"
+}

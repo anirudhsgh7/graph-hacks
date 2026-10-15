@@ -1,9 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, investigate, IS_MOCK } from "@/lib/api";
+import { ApiError, fetchCase, graphSnapshot, investigate, IS_MOCK } from "@/lib/api";
 import { caseMeta } from "@/lib/mocks";
-import type { Evidence, InvestigationResponse } from "@/lib/types";
+import type {
+  CaseSummary,
+  Conclusion,
+  Evidence,
+  ExecuteActionResponse,
+  InvestigationResponse,
+} from "@/lib/types";
 import GraphCanvas from "@/components/GraphCanvas";
 import AgentTrace from "@/components/AgentTrace";
 import FindingsPanel from "@/components/FindingsPanel";
@@ -17,8 +23,27 @@ interface InvestigationItem {
   response: InvestigationResponse;
 }
 
+// The verdict is computed by the backend rule over graph measurements, not by
+// the model — see backend/docs/api-contract.md.
+const CONCLUSION_BADGE: Record<Conclusion, string> = {
+  suspicious: "badge-warn",
+  no_evidence: "badge-info",
+  inconclusive: "badge-neutral",
+};
+
+const CONCLUSION_LABEL: Record<Conclusion, string> = {
+  suspicious: "suspicious activity",
+  no_evidence: "no evidence",
+  inconclusive: "inconclusive",
+};
+
+function LegendDot({ className }: { className: string }) {
+  return <span className={`h-1.5 w-1.5 rounded-full ${className}`} />;
+}
+
 export default function CaseView({ caseId }: { caseId: string }) {
-  const meta = useMemo(() => caseMeta(caseId), [caseId]);
+  const mockMeta = useMemo(() => caseMeta(caseId), [caseId]);
+  const [caseInfo, setCaseInfo] = useState<CaseSummary | null>(null);
   const [items, setItems] = useState<InvestigationItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -28,6 +53,24 @@ export default function CaseView({ caseId }: { caseId: string }) {
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
   const [selectedEvidenceId, setSelectedEvidenceId] = useState<string | null>(null);
   const startedAt = useRef<number | null>(null);
+
+  // Live mode: the briefing (title, alert, suggested questions) comes from the
+  // backend case store; the fixture copy is the immediate fallback.
+  const briefing = caseInfo ?? mockMeta;
+  useEffect(() => {
+    if (IS_MOCK) return;
+    let cancelled = false;
+    fetchCase(caseId)
+      .then((c) => {
+        if (!cancelled) setCaseInfo(c);
+      })
+      .catch(() => {
+        /* fall back to the fixture briefing */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [caseId]);
 
   const active = items.find((i) => i.id === activeId) ?? items[0] ?? null;
   const activeEvidence = useMemo(() => active?.response.evidence ?? [], [active]);
@@ -81,9 +124,9 @@ export default function CaseView({ caseId }: { caseId: string }) {
   useEffect(() => {
     if (!autoRan.current && IS_MOCK && items.length === 0) {
       autoRan.current = true;
-      void ask(meta.suggested[0]);
+      void ask(briefing.suggested_questions[0]);
     }
-  }, [ask, items.length, meta.suggested]);
+  }, [ask, items.length, briefing.suggested_questions]);
 
   const selectedEvidence: Evidence | null =
     activeEvidence.find((e) => e.id === selectedEvidenceId) ?? null;
@@ -105,48 +148,124 @@ export default function CaseView({ caseId }: { caseId: string }) {
     return { nodeIds: Array.from(nodeIds), edgeIds: Array.from(edgeIds) };
   }, [active, activeEvidence, selectedEvidence, selectedFindingId]);
 
+  const metaSegments = useMemo(() => {
+    const segments: string[] = [];
+    const m = active?.response.meta;
+    if (!m) return segments;
+    segments.push(m.model ?? m.mode.replace("_", "-"));
+    segments.push(`${m.tool_iterations} tool calls`);
+    segments.push(`${(m.latency_ms / 1000).toFixed(1)}s`);
+    if (m.frozen_accounts.length > 0) segments.push(`${m.frozen_accounts.length} frozen`);
+    return segments;
+  }, [active]);
+
+  // After an action executes, mirror the backend: apply the returned graph_delta
+  // immediately, then refresh the canvas from the snapshot endpoint (current
+  // account statuses with the latest investigation's highlights).
+  const applyGraphDelta = useCallback((itemId: string, delta: ExecuteActionResponse["graph_delta"]) => {
+    if (delta.nodes.length === 0) return;
+    const patch = new Map(delta.nodes.map((n) => [n.id, n.status]));
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id !== itemId
+          ? item
+          : {
+              ...item,
+              response: {
+                ...item.response,
+                graph: {
+                  ...item.response.graph,
+                  nodes: item.response.graph.nodes.map((n) =>
+                    patch.has(n.id) ? { ...n, status: patch.get(n.id) } : n,
+                  ),
+                },
+              },
+            },
+      ),
+    );
+  }, []);
+
+  const onActionExecuted = useCallback(
+    async (result: ExecuteActionResponse) => {
+      const itemId = active?.id;
+      if (!itemId) return;
+      applyGraphDelta(itemId, result.graph_delta);
+      try {
+        const graph = await graphSnapshot(caseId);
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === itemId ? { ...item, response: { ...item.response, graph } } : item,
+          ),
+        );
+      } catch {
+        // keep the optimistic patch if the snapshot refresh fails
+      }
+    },
+    [active, applyGraphDelta, caseId],
+  );
+
+  const noEvidence = active
+    ? active.response.conclusion === "no_evidence" || active.response.status === "no_evidence"
+    : false;
+
   return (
-    <main className="mx-auto w-full max-w-[1400px] flex-1 space-y-4 px-4 py-6 lg:px-6">
-      {/* Case briefing */}
-      <section className="card">
+    <main className="app-container flex-1 space-y-6 py-6 lg:py-8">
+      {/* Case briefing — plain header block, no card */}
+      <section className="border-b border-line pb-5">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span className="chip font-mono">{caseId}</span>
-          <h1 className="text-lg font-semibold text-slate-100">{meta.title}</h1>
-          {active && <span className="chip">status: {active.response.status}</span>}
+          <span className="font-mono text-[12px] text-faint">{caseId}</span>
+          <h1 className="text-lg font-semibold tracking-tight text-ink">{briefing.title}</h1>
+          {active && (
+            <>
+              <span className={`badge ${CONCLUSION_BADGE[active.response.conclusion]}`}>
+                {CONCLUSION_LABEL[active.response.conclusion]}
+              </span>
+              {active.response.status === "partial" && <span className="badge badge-warn">partial</span>}
+            </>
+          )}
         </div>
-        <p className="mt-2 text-sm text-slate-400">
-          <span className="text-slate-500">Alert: </span>
-          {meta.alert}
+        <p className="mt-2.5 max-w-3xl border-l-2 border-accent-line pl-3 text-[13px] leading-relaxed text-muted">
+          <span className="text-faint">Alert — </span>
+          {briefing.alert}
         </p>
       </section>
 
-      {/* Ask the agent */}
-      <section className="card">
+      {/* Ask the agent — the primary interaction */}
+      <section aria-label="Ask the agent">
         <form
           onSubmit={(e) => {
             e.preventDefault();
             void ask(input);
           }}
-          className="flex flex-col gap-3"
         >
           <div className="flex gap-2">
             <input
-              className="input"
+              className="input h-11 text-[14px]"
               placeholder="Ask the agent about this case…"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               disabled={loading}
             />
-            <button className="btn btn-primary shrink-0" type="submit" disabled={loading || input.trim().length === 0}>
+            <button
+              className="btn btn-primary h-11 shrink-0 px-5"
+              type="submit"
+              disabled={loading || input.trim().length === 0}
+            >
+              {loading && (
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              )}
               {loading ? "Investigating…" : "Investigate"}
             </button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {meta.suggested.map((q) => (
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-faint">
+              Suggested
+            </span>
+            {briefing.suggested_questions.map((q) => (
               <button
                 key={q}
                 type="button"
-                className="chip transition hover:border-amber-500/60 hover:text-amber-300 disabled:opacity-50"
+                className="text-[12.5px] text-muted transition-colors hover:text-accent disabled:opacity-50"
                 disabled={loading}
                 onClick={() => void ask(q)}
               >
@@ -158,12 +277,12 @@ export default function CaseView({ caseId }: { caseId: string }) {
       </section>
 
       {loading && (
-        <section className="card border-amber-500/40">
+        <div className="rounded-lg border border-accent-line bg-accent-soft px-4 py-3.5">
           <div className="flex items-center gap-3">
-            <span className="h-2.5 w-2.5 animate-ping rounded-full bg-amber-400" />
-            <div className="text-sm text-amber-200">
+            <span className="h-2.5 w-2.5 animate-ping rounded-full bg-accent-fill" />
+            <div className="text-sm text-ink">
               Agent investigating — running graph tools…{" "}
-              <span className="font-mono text-xs text-amber-300/80">{Math.floor(elapsedMs / 1000)}s</span>
+              <span className="font-mono text-xs tabular-nums text-accent">{Math.floor(elapsedMs / 1000)}s</span>
             </div>
           </div>
           <div className="mt-3 space-y-2">
@@ -171,119 +290,149 @@ export default function CaseView({ caseId }: { caseId: string }) {
             <div className="skeleton h-3 w-1/2" />
             <div className="skeleton h-3 w-3/5" />
           </div>
-        </section>
+        </div>
       )}
 
       {error && (
-        <section className="card border-rose-500/50 bg-rose-950/30">
-          <div className="text-sm font-medium text-rose-300">{error.code}</div>
-          <p className="mt-1 text-sm text-rose-200/90">{error.message}</p>
+        <div className="rounded-lg border border-danger-line bg-danger-soft px-4 py-3.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="badge badge-danger font-mono">{error.code}</span>
+            <span className="text-[13px] text-muted">The investigation did not complete.</span>
+          </div>
+          <p className="mt-2 text-sm leading-relaxed text-ink">{error.message}</p>
           <button
             type="button"
             className="btn mt-3"
             onClick={() => {
-              const last = items[0]?.question ?? meta.suggested[0];
+              const last = items[0]?.question ?? briefing.suggested_questions[0];
               void ask(last);
             }}
           >
             Retry
           </button>
-        </section>
+        </div>
       )}
 
       {!active && !loading && !error && (
-        <section className="card text-sm text-slate-400">
-          No investigation yet — ask a question above or pick a suggested one.
-        </section>
+        <div className="grid place-items-center rounded-xl bg-raised py-20 text-center text-[13px] text-faint">
+          No investigation yet — ask a question above or pick a suggestion.
+        </div>
       )}
 
       {active && (
         <>
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-            {/* Graph */}
-            <section className="card xl:col-span-7">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Transaction network</h2>
-                <div className="flex items-center gap-3 text-[11px] text-slate-400">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-rose-500" /> ring
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-amber-400" /> trail
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-slate-500" /> frozen
-                  </span>
+          {/* Workspace: network (sticky on desktop) + investigation report */}
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+            <section className="xl:col-span-7">
+              <div className="xl:sticky xl:top-[73px]">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="eyebrow">Transaction network</h2>
+                  <div className="flex items-center gap-3 text-[11px] text-muted">
+                    <span className="inline-flex items-center gap-1.5">
+                      <LegendDot className="bg-graph-ring" /> ring
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <LegendDot className="bg-graph-trail" /> trail
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <LegendDot className="bg-graph-cut" /> cut
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <LegendDot className="bg-graph-frozen" /> frozen
+                    </span>
+                  </div>
                 </div>
+                <GraphCanvas graph={active.response.graph} emphasis={emphasis} />
               </div>
-              <GraphCanvas graph={active.response.graph} emphasis={emphasis} />
             </section>
 
-            {/* Findings / evidence / actions */}
-            <section className="space-y-4 xl:col-span-5">
-              <div className="card">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Agent summary</h2>
-                <p className="mt-2 text-sm leading-relaxed text-slate-200">{active.response.summary}</p>
-                <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
-                  <span className="chip">asked: “{active.question}”</span>
-                  {active.response.meta?.model && <span className="chip">model: {active.response.meta.model}</span>}
-                  {typeof active.response.meta?.tool_iterations === "number" && (
-                    <span className="chip">{active.response.meta.tool_iterations} tool calls</span>
-                  )}
-                  {typeof active.response.meta?.latency_ms === "number" && (
-                    <span className="chip">{(active.response.meta.latency_ms / 1000).toFixed(1)}s</span>
-                  )}
-                </div>
-              </div>
-
-              {active.response.status === "no_evidence" && (
-                <div className="card border-sky-500/40 bg-sky-950/20">
-                  <h2 className="text-sm font-semibold text-sky-300">No ring evidence found</h2>
-                  <p className="mt-1 text-sm leading-relaxed text-sky-200/80">
-                    The agent checked shared entities, pass-through timing and community structure, and concluded the
-                    alert is benign. The trace below shows exactly what was run — this is the honest-false-alarm case.
-                  </p>
-                </div>
-              )}
-
-              <FindingsPanel
-                findings={active.response.findings}
-                evidence={activeEvidence}
-                selectedFindingId={selectedFindingId}
-                selectedEvidenceId={selectedEvidenceId}
-                onSelectFinding={(id) => {
-                  setSelectedFindingId(id);
-                  setSelectedEvidenceId(null);
-                }}
-                onSelectEvidence={(id) => setSelectedEvidenceId(id)}
-              />
-
-              <EvidenceDetail evidence={selectedEvidence} />
-
-              {active.response.proposed_actions.length > 0 && (
-                <div className="space-y-3">
-                  <h2 className="px-1 text-sm font-semibold uppercase tracking-wide text-slate-400">
-                    Proposed actions
+            {/* One continuous report surface, sections separated by hairlines */}
+            <section className="xl:col-span-5">
+              <div className="card divide-y divide-line p-0">
+                {/* Conclusion first — the headline of the investigation */}
+                <div className="px-4 py-4">
+                  <p className="text-[12px] leading-snug text-muted">“{active.question}”</p>
+                  <h2 className="eyebrow mt-3">
+                    Agent conclusion
+                    {noEvidence && <span className="text-info"> — no laundering evidence found</span>}
                   </h2>
-                  {active.response.proposed_actions.map((a) => (
-                    <ActionCard key={a.id} action={a} onSelectEvidence={(id) => setSelectedEvidenceId(id)} />
-                  ))}
+                  <p className="mt-2 text-[15px] leading-relaxed text-ink">{active.response.summary}</p>
+                  {noEvidence && (
+                    <p className="mt-2 text-[11px] leading-relaxed text-faint">
+                      A defensible no-evidence result — the honest-false-alarm path; the trace below lists
+                      every check the agent ran.
+                    </p>
+                  )}
+                  {active.response.meta.notes.length > 0 && (
+                    <ul className="mt-2 space-y-0.5">
+                      {active.response.meta.notes.map((n) => (
+                        <li key={n} className="text-[11px] leading-relaxed text-faint">
+                          {n}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {metaSegments.length > 0 && (
+                    <div className="mt-3 font-mono text-[11px] text-faint tabular-nums">
+                      {metaSegments.join("  ·  ")}
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {active.response.findings.length > 0 && (
+                  <div className="px-4 py-4">
+                    <h2 className="eyebrow">Findings</h2>
+                    <FindingsPanel
+                      findings={active.response.findings}
+                      evidence={activeEvidence}
+                      selectedFindingId={selectedFindingId}
+                      selectedEvidenceId={selectedEvidenceId}
+                      onSelectFinding={(id) => {
+                        setSelectedFindingId(id);
+                        setSelectedEvidenceId(null);
+                      }}
+                      onSelectEvidence={(id) => setSelectedEvidenceId(id)}
+                    />
+                  </div>
+                )}
+
+                {selectedEvidence && (
+                  <div className="px-4 py-4">
+                    <EvidenceDetail evidence={selectedEvidence} />
+                  </div>
+                )}
+
+                {active.response.proposed_actions.length > 0 && (
+                  <div className="px-4 py-4">
+                    <h2 className="eyebrow">Proposed actions</h2>
+                    <div className="mt-3 space-y-3">
+                      {active.response.proposed_actions.map((a) => (
+                        <ActionCard
+                          key={a.id}
+                          action={a}
+                          caseId={caseId}
+                          onSelectEvidence={(id) => setSelectedEvidenceId(id)}
+                          onExecuted={onActionExecuted}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </section>
           </div>
 
-          {/* Trace */}
-          <section className="card">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Agent trace</h2>
+          {/* Technical trace */}
+          <section className="border-t border-line pt-5">
+            <h2 className="eyebrow">Agent trace</h2>
             <AgentTrace trace={active.response.trace} />
           </section>
 
-          {/* Feed */}
+          {/* Investigation feed */}
           {items.length > 1 && (
-            <section className="card">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Investigation feed</h2>
-              <ul className="mt-2 divide-y divide-slate-800">
+            <section className="border-t border-line pt-5">
+              <h2 className="eyebrow">Investigation feed</h2>
+              <ul className="mt-2 divide-y divide-line">
                 {items.map((item) => (
                   <li key={item.id}>
                     <button
@@ -293,11 +442,11 @@ export default function CaseView({ caseId }: { caseId: string }) {
                         setSelectedFindingId(null);
                         setSelectedEvidenceId(null);
                       }}
-                      className={`w-full py-2 text-left text-sm transition hover:text-amber-300 ${
-                        item.id === active.id ? "text-amber-300" : "text-slate-300"
+                      className={`w-full py-2.5 text-left text-sm transition hover:text-accent ${
+                        item.id === active.id ? "text-accent" : "text-ink"
                       }`}
                     >
-                      <span className="font-mono text-xs text-slate-500">
+                      <span className="font-mono text-xs tabular-nums text-faint">
                         {new Date(item.askedAt).toLocaleTimeString()}
                       </span>{" "}
                       {item.question}

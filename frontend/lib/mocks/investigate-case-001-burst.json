@@ -1,0 +1,1709 @@
+{
+  "investigation_id": "inv-4dabb6d7",
+  "case_id": "case-001",
+  "question": "Who is behind this burst of transfers?",
+  "created_at": "2026-10-15T17:48:17Z",
+  "status": "complete",
+  "conclusion": "suspicious",
+  "summary": "A17 is part of a 7-account mule ring that shares 3 devices and passes money on within about 13 minutes; money reaches H3 through 4 time-ordered routes, the fastest in 36 minutes; up to $30,100 can reach H3; freezing just A47 and A52 cuts every route (proven on a copy of the graph), whereas 'freeze the alerted account only' would leave 74% flowing.",
+  "findings": [
+    {
+      "id": "f-1",
+      "title": "Mule ring detected (7 accounts)",
+      "detail": "A17, A22, A31, A47, A52, A63 and A68 share 3 devices and 2 IP addresses, pass on 98% of what they receive, typically 13 minutes after it arrives.",
+      "confidence": 0.9,
+      "evidence_refs": [
+        "ev-3"
+      ]
+    },
+    {
+      "id": "f-2",
+      "title": "Money trail A17 to H3: 4 hops in 36 minutes",
+      "detail": "A17 -> A63 -> A31 -> A47 -> H3: $3,300 left A17 and $3,060 reached H3; no hop took longer than 14 minutes. 3 more time-ordered routes lead to H3.",
+      "confidence": 0.9,
+      "evidence_refs": [
+        "ev-5",
+        "ev-6",
+        "ev-8",
+        "ev-9"
+      ]
+    },
+    {
+      "id": "f-3",
+      "title": "Laundering capacity: $30,100",
+      "detail": "Maximum money that can flow from A17, A63 and A68 to H3 over the observed transfers (max-flow).",
+      "confidence": 0.85,
+      "evidence_refs": [
+        "ev-10"
+      ]
+    },
+    {
+      "id": "f-4",
+      "title": "Freezing 2 accounts stops every route: A47 and A52",
+      "detail": "Minimum cut between A17, A63 and A68 and H3, proven on a copy of the graph: capacity $30,100 -> $0, 0 routes left. Compare: freeze the alerted account only: 74% still flows; freeze the biggest aggregator (A47): 20% still flows.",
+      "confidence": 0.95,
+      "evidence_refs": [
+        "ev-11"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev-1",
+      "type": "profile",
+      "tool": "account_profile",
+      "node_ids": [
+        "A17"
+      ],
+      "edge_ids": [],
+      "result_excerpt": {
+        "anomaly_score": 0.455,
+        "anomaly_rank": 7,
+        "anomaly_top_pct": 1.2,
+        "forwarded_within_60_min_share": 0.542,
+        "median_minutes_money_stays": 66.5,
+        "distinct_senders": 4,
+        "one_time_sender_share": 1.0,
+        "type": "personal"
+      },
+      "receipts": [
+        {
+          "query": "account_profile",
+          "params": {
+            "id": "A17"
+          },
+          "cypher": "MATCH (c:Customer)-[:OWNS]->(a:Account {id: $id})\nOPTIONAL MATCH (a)-[o:TRANSFER]->(r:Account)\nWITH c, a, count(o) AS out_count, sum(o.amount) AS out_total, count(DISTINCT r) AS out_counterparties\nOPTIONAL MATCH (s:Account)-[i:TRANSFER]->(a)\nRETURN a.id AS id, a.type AS type, a.status AS status, a.opened_at AS opened_at,\n       a.country AS country, a.anomaly_score AS anomaly_score, c.id AS customer_id, c.name AS owner,\n       out_count, out_total, out_counterparties,\n       count(i) AS in_count, sum(i.amount) AS in_total, count(DISTINCT s) AS in_counterparties"
+        },
+        {
+          "query": "anomaly_rank",
+          "params": {
+            "score": 0.455
+          },
+          "cypher": "MATCH (b:Account)\nRETURN count(b) AS total, sum(CASE WHEN b.anomaly_score > $score THEN 1 ELSE 0 END) AS higher"
+        },
+        {
+          "query": "inbound_sender_repeats",
+          "params": {
+            "id": "A17"
+          },
+          "cypher": "MATCH (s:Account)-[i:TRANSFER]->(a:Account {id: $id})\nRETURN s.id AS sender, count(i) AS times, sum(i.amount) AS total"
+        }
+      ]
+    },
+    {
+      "id": "ev-2",
+      "type": "shared_entities",
+      "tool": "shared_infrastructure",
+      "node_ids": [
+        "A17",
+        "A22",
+        "A31",
+        "A47",
+        "A63",
+        "D-901",
+        "D-902",
+        "IP-901"
+      ],
+      "edge_ids": [],
+      "result_excerpt": {
+        "linked_accounts": 4,
+        "shared_devices": 2,
+        "shared_ips": 1
+      },
+      "receipts": [
+        {
+          "query": "shared_infrastructure",
+          "params": {
+            "id": "A17"
+          },
+          "cypher": "MATCH (a:Account {id: $id})-[:USED_DEVICE|USED_IP]->(x)<-[:USED_DEVICE|USED_IP]-(b:Account)\nWHERE b.id <> $id\nRETURN b.id AS account, labels(x)[0] AS via_kind, x.id AS via_id\nORDER BY account, via_id"
+        }
+      ]
+    },
+    {
+      "id": "ev-3",
+      "type": "community",
+      "tool": "detect_ring",
+      "node_ids": [
+        "A17",
+        "A22",
+        "A31",
+        "A47",
+        "A52",
+        "A63",
+        "A68",
+        "D-901",
+        "D-902",
+        "D-903",
+        "IP-901",
+        "IP-902"
+      ],
+      "edge_ids": [
+        "T-07933",
+        "T-07944",
+        "T-07953",
+        "T-07957",
+        "T-07964",
+        "T-07966",
+        "T-07967",
+        "T-07970",
+        "T-07977",
+        "T-07980",
+        "T-07988",
+        "T-07989",
+        "T-07994",
+        "T-08006",
+        "T-08018",
+        "T-08021",
+        "T-08026",
+        "T-08028",
+        "T-08035"
+      ],
+      "result_excerpt": {
+        "community_size": 7,
+        "verdict": "mule_ring",
+        "pass_through_ratio": 0.985,
+        "median_forward_minutes": 13.0,
+        "shared_devices": 3,
+        "shared_ips": 2,
+        "seed_nodes_covered": 5,
+        "entry_points": [
+          "A17",
+          "A63",
+          "A68"
+        ],
+        "cashout_candidates": [
+          "H3",
+          "A77",
+          "A88",
+          "A87",
+          "A86"
+        ]
+      },
+      "receipts": [
+        {
+          "query": "infrastructure_components",
+          "params": {
+            "ids": [
+              "A17",
+              "A22",
+              "A31",
+              "A47",
+              "A63"
+            ]
+          },
+          "cypher": "CALL algo.WCC({nodeLabels: ['Account', 'Device', 'IPAddress'], relationshipTypes: ['USED_DEVICE', 'USED_IP']})\nYIELD node, componentId\nWITH node, componentId\nWHERE 'Account' IN labels(node)\nWITH componentId, collect(node.id) AS members\nWHERE any(m IN members WHERE m IN $ids)\nRETURN componentId, members"
+        },
+        {
+          "query": "shared_infrastructure_among",
+          "params": {
+            "ids": [
+              "A17",
+              "A22",
+              "A31",
+              "A47",
+              "A52",
+              "A63",
+              "A68"
+            ]
+          },
+          "cypher": "MATCH (a:Account)-[:USED_DEVICE|USED_IP]->(x)<-[:USED_DEVICE|USED_IP]-(b:Account)\nWHERE a.id IN $ids AND b.id IN $ids AND a.id < b.id\nRETURN a.id AS a, b.id AS b, labels(x)[0] AS via_kind, x.id AS via_id"
+        },
+        {
+          "query": "account_transfers",
+          "params": {
+            "ids": [
+              "A17",
+              "A22",
+              "A31",
+              "A47",
+              "A52",
+              "A63",
+              "A68"
+            ]
+          },
+          "cypher": "MATCH (a:Account)-[t:TRANSFER]->(b:Account)\nWHERE a.id IN $ids OR b.id IN $ids\nRETURN a.id AS src, b.id AS dst, t.id AS id, t.amount AS amount, t.ts AS ts\nORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": "ev-4",
+      "type": "pattern",
+      "tool": "layering_scan",
+      "node_ids": [
+        "A31",
+        "A47",
+        "H3",
+        "A114",
+        "A63",
+        "A52",
+        "A68",
+        "A77",
+        "A17",
+        "A22",
+        "A115",
+        "A116",
+        "A111"
+      ],
+      "edge_ids": [
+        "T-07944",
+        "T-07948",
+        "T-07926",
+        "T-07933",
+        "T-07964",
+        "T-07971",
+        "T-08026",
+        "T-08033",
+        "T-07994",
+        "T-08002",
+        "T-08021",
+        "T-08028",
+        "T-08035",
+        "T-08038",
+        "T-07980",
+        "T-07989",
+        "T-07957",
+        "T-07966",
+        "T-08018",
+        "T-07977",
+        "T-07983",
+        "T-07960",
+        "T-07967",
+        "T-07988",
+        "T-07979",
+        "T-07953",
+        "T-07970",
+        "T-07945",
+        "T-07995",
+        "T-08006",
+        "T-07921"
+      ],
+      "result_excerpt": {
+        "pass_through_patterns": 26,
+        "accounts_with_pattern": 7,
+        "window_minutes": 60
+      },
+      "receipts": [
+        {
+          "query": "layering_pairs",
+          "params": {
+            "ids": [
+              "A17",
+              "A22",
+              "A31",
+              "A47",
+              "A52",
+              "A63",
+              "A68"
+            ],
+            "window_ms": 3600000,
+            "fee_tolerance": 0.1
+          },
+          "cypher": "MATCH (a:Account)-[t1:TRANSFER]->(m:Account)-[t2:TRANSFER]->(b:Account)\nWHERE m.id IN $ids\n  AND t2.ts > t1.ts AND t2.ts - t1.ts <= $window_ms\n  AND t2.amount <= t1.amount AND t2.amount >= t1.amount * (1.0 - $fee_tolerance)\n  AND a.id <> b.id\nRETURN a.id AS src, m.id AS via, b.id AS dst, t1.id AS in_id, t2.id AS out_id,\n       t1.amount AS in_amount, t2.amount AS out_amount, (t2.ts - t1.ts) AS gap_ms\nORDER BY gap_ms ASC\nLIMIT 50"
+        }
+      ]
+    },
+    {
+      "id": "ev-5",
+      "type": "path",
+      "tool": "money_trail",
+      "node_ids": [
+        "A17",
+        "A63",
+        "A31",
+        "A47",
+        "H3"
+      ],
+      "edge_ids": [
+        "T-08021",
+        "T-08028",
+        "T-08035",
+        "T-08038"
+      ],
+      "result_excerpt": {
+        "hops": 4,
+        "quality": "strong",
+        "time_ordered": true,
+        "amount_consistent": true,
+        "minutes_total": 36.0,
+        "max_hop_minutes": 14.0,
+        "start_amount": 3300.0,
+        "end_amount": 3060.0,
+        "retained_pct": 92.7
+      },
+      "receipts": [
+        {
+          "query": "money_trail_paths",
+          "params": {
+            "src": "A17",
+            "dst": "H3",
+            "max_len": 6,
+            "path_count": 5
+          },
+          "cypher": "MATCH (s:Account {id: $src}), (t:Account {id: $dst})\nCALL algo.SPpaths({sourceNode: s, targetNode: t, relTypes: ['FLOWS_TO'], relDirection: 'outgoing',\n                   maxLen: $max_len, pathCount: $path_count})\nYIELD path, pathWeight\nRETURN [n IN nodes(path) | n.id] AS nodes, pathWeight AS hops"
+        },
+        {
+          "query": "hop_transfers",
+          "params": {
+            "pairs": [
+              [
+                "A17",
+                "A63"
+              ],
+              [
+                "A63",
+                "A31"
+              ],
+              [
+                "A31",
+                "A47"
+              ],
+              [
+                "A47",
+                "H3"
+              ]
+            ]
+          },
+          "cypher": "UNWIND $pairs AS p\nMATCH (a:Account {id: p[0]})-[t:TRANSFER]->(b:Account {id: p[1]})\nRETURN a.id AS src, b.id AS dst, t.id AS id, t.amount AS amount, t.ts AS ts\nORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": "ev-6",
+      "type": "path",
+      "tool": "money_trail",
+      "node_ids": [
+        "A17",
+        "A63",
+        "A52",
+        "A77",
+        "H3"
+      ],
+      "edge_ids": [
+        "T-07970",
+        "T-07980",
+        "T-08002",
+        "T-08015"
+      ],
+      "result_excerpt": {
+        "hops": 4,
+        "quality": "strong",
+        "time_ordered": true,
+        "amount_consistent": true,
+        "minutes_total": 61.0,
+        "max_hop_minutes": 35.0,
+        "start_amount": 3500.0,
+        "end_amount": 2490.0,
+        "retained_pct": 71.1
+      },
+      "receipts": [
+        {
+          "query": "money_trail_paths",
+          "params": {
+            "src": "A17",
+            "dst": "H3",
+            "max_len": 6,
+            "path_count": 5
+          },
+          "cypher": "MATCH (s:Account {id: $src}), (t:Account {id: $dst})\nCALL algo.SPpaths({sourceNode: s, targetNode: t, relTypes: ['FLOWS_TO'], relDirection: 'outgoing',\n                   maxLen: $max_len, pathCount: $path_count})\nYIELD path, pathWeight\nRETURN [n IN nodes(path) | n.id] AS nodes, pathWeight AS hops"
+        },
+        {
+          "query": "hop_transfers",
+          "params": {
+            "pairs": [
+              [
+                "A17",
+                "A63"
+              ],
+              [
+                "A63",
+                "A52"
+              ],
+              [
+                "A52",
+                "A77"
+              ],
+              [
+                "A77",
+                "H3"
+              ]
+            ]
+          },
+          "cypher": "UNWIND $pairs AS p\nMATCH (a:Account {id: p[0]})-[t:TRANSFER]->(b:Account {id: p[1]})\nRETURN a.id AS src, b.id AS dst, t.id AS id, t.amount AS amount, t.ts AS ts\nORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": "ev-7",
+      "type": "path",
+      "tool": "money_trail",
+      "node_ids": [
+        "A17",
+        "A68",
+        "A52",
+        "A47",
+        "H3"
+      ],
+      "edge_ids": [
+        "T-07988",
+        "T-07994",
+        "T-07989",
+        "T-08038"
+      ],
+      "result_excerpt": {
+        "hops": 4,
+        "quality": "structural",
+        "time_ordered": false,
+        "amount_consistent": false
+      },
+      "receipts": [
+        {
+          "query": "money_trail_paths",
+          "params": {
+            "src": "A17",
+            "dst": "H3",
+            "max_len": 6,
+            "path_count": 5
+          },
+          "cypher": "MATCH (s:Account {id: $src}), (t:Account {id: $dst})\nCALL algo.SPpaths({sourceNode: s, targetNode: t, relTypes: ['FLOWS_TO'], relDirection: 'outgoing',\n                   maxLen: $max_len, pathCount: $path_count})\nYIELD path, pathWeight\nRETURN [n IN nodes(path) | n.id] AS nodes, pathWeight AS hops"
+        },
+        {
+          "query": "hop_transfers",
+          "params": {
+            "pairs": [
+              [
+                "A17",
+                "A68"
+              ],
+              [
+                "A68",
+                "A52"
+              ],
+              [
+                "A52",
+                "A47"
+              ],
+              [
+                "A47",
+                "H3"
+              ]
+            ]
+          },
+          "cypher": "UNWIND $pairs AS p\nMATCH (a:Account {id: p[0]})-[t:TRANSFER]->(b:Account {id: p[1]})\nRETURN a.id AS src, b.id AS dst, t.id AS id, t.amount AS amount, t.ts AS ts\nORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": "ev-8",
+      "type": "path",
+      "tool": "money_trail",
+      "node_ids": [
+        "A17",
+        "A68",
+        "A52",
+        "A77",
+        "H3"
+      ],
+      "edge_ids": [
+        "T-07988",
+        "T-07994",
+        "T-08002",
+        "T-08015"
+      ],
+      "result_excerpt": {
+        "hops": 4,
+        "quality": "strong",
+        "time_ordered": true,
+        "amount_consistent": true,
+        "minutes_total": 36.0,
+        "max_hop_minutes": 13.0,
+        "start_amount": 2700.0,
+        "end_amount": 2490.0,
+        "retained_pct": 92.2
+      },
+      "receipts": [
+        {
+          "query": "money_trail_paths",
+          "params": {
+            "src": "A17",
+            "dst": "H3",
+            "max_len": 6,
+            "path_count": 5
+          },
+          "cypher": "MATCH (s:Account {id: $src}), (t:Account {id: $dst})\nCALL algo.SPpaths({sourceNode: s, targetNode: t, relTypes: ['FLOWS_TO'], relDirection: 'outgoing',\n                   maxLen: $max_len, pathCount: $path_count})\nYIELD path, pathWeight\nRETURN [n IN nodes(path) | n.id] AS nodes, pathWeight AS hops"
+        },
+        {
+          "query": "hop_transfers",
+          "params": {
+            "pairs": [
+              [
+                "A17",
+                "A68"
+              ],
+              [
+                "A68",
+                "A52"
+              ],
+              [
+                "A52",
+                "A77"
+              ],
+              [
+                "A77",
+                "H3"
+              ]
+            ]
+          },
+          "cypher": "UNWIND $pairs AS p\nMATCH (a:Account {id: p[0]})-[t:TRANSFER]->(b:Account {id: p[1]})\nRETURN a.id AS src, b.id AS dst, t.id AS id, t.amount AS amount, t.ts AS ts\nORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": "ev-9",
+      "type": "path",
+      "tool": "money_trail",
+      "node_ids": [
+        "A17",
+        "A63",
+        "A52",
+        "A47",
+        "H3"
+      ],
+      "edge_ids": [
+        "T-07970",
+        "T-07980",
+        "T-07989",
+        "T-07995"
+      ],
+      "result_excerpt": {
+        "hops": 4,
+        "quality": "strong",
+        "time_ordered": true,
+        "amount_consistent": true,
+        "minutes_total": 38.0,
+        "max_hop_minutes": 13.0,
+        "start_amount": 3500.0,
+        "end_amount": 3250.0,
+        "retained_pct": 92.9
+      },
+      "receipts": [
+        {
+          "query": "money_trail_paths",
+          "params": {
+            "src": "A17",
+            "dst": "H3",
+            "max_len": 6,
+            "path_count": 5
+          },
+          "cypher": "MATCH (s:Account {id: $src}), (t:Account {id: $dst})\nCALL algo.SPpaths({sourceNode: s, targetNode: t, relTypes: ['FLOWS_TO'], relDirection: 'outgoing',\n                   maxLen: $max_len, pathCount: $path_count})\nYIELD path, pathWeight\nRETURN [n IN nodes(path) | n.id] AS nodes, pathWeight AS hops"
+        },
+        {
+          "query": "hop_transfers",
+          "params": {
+            "pairs": [
+              [
+                "A17",
+                "A63"
+              ],
+              [
+                "A63",
+                "A52"
+              ],
+              [
+                "A52",
+                "A47"
+              ],
+              [
+                "A47",
+                "H3"
+              ]
+            ]
+          },
+          "cypher": "UNWIND $pairs AS p\nMATCH (a:Account {id: p[0]})-[t:TRANSFER]->(b:Account {id: p[1]})\nRETURN a.id AS src, b.id AS dst, t.id AS id, t.amount AS amount, t.ts AS ts\nORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": "ev-10",
+      "type": "capacity",
+      "tool": "laundering_capacity",
+      "node_ids": [
+        "A17",
+        "A63",
+        "A68",
+        "H3",
+        "A47",
+        "A31",
+        "A52",
+        "A22",
+        "A77"
+      ],
+      "edge_ids": [],
+      "result_excerpt": {
+        "capacity": 30100.0,
+        "engine": "python",
+        "entry_ids": [
+          "A17",
+          "A63",
+          "A68"
+        ],
+        "hub_ids": [
+          "H3"
+        ],
+        "flow_pairs": [
+          [
+            "A47",
+            "H3"
+          ],
+          [
+            "A31",
+            "A47"
+          ],
+          [
+            "A52",
+            "A47"
+          ],
+          [
+            "A17",
+            "A22"
+          ],
+          [
+            "A22",
+            "A31"
+          ],
+          [
+            "A63",
+            "A31"
+          ],
+          [
+            "A68",
+            "A52"
+          ],
+          [
+            "A63",
+            "A52"
+          ],
+          [
+            "A52",
+            "A77"
+          ],
+          [
+            "A77",
+            "H3"
+          ]
+        ]
+      },
+      "receipts": [
+        {
+          "query": "flow_edge_count",
+          "params": {},
+          "cypher": "MATCH (:Account)-[f:FLOWS_TO]->(:Account)\nRETURN count(f) AS total"
+        }
+      ]
+    },
+    {
+      "id": "ev-11",
+      "type": "freeze_plan",
+      "tool": "plan_minimum_freeze",
+      "node_ids": [
+        "A47",
+        "A52",
+        "A17",
+        "A63",
+        "A68",
+        "H3"
+      ],
+      "edge_ids": [],
+      "result_excerpt": {
+        "recommended": [
+          "A47",
+          "A52"
+        ],
+        "count": 2,
+        "capacity_before": 30100.0,
+        "capacity_after": 0.0,
+        "remaining_paths": 0,
+        "entry_ids": [
+          "A17",
+          "A63",
+          "A68"
+        ],
+        "hub_ids": [
+          "H3"
+        ],
+        "alternatives": [
+          {
+            "plan": "freeze the alerted account only",
+            "count": 1,
+            "remaining_pct": 74.0
+          },
+          {
+            "plan": "freeze the biggest aggregator (A47)",
+            "count": 1,
+            "remaining_pct": 20.0
+          },
+          {
+            "plan": "freeze every account on the money paths",
+            "count": 8,
+            "remaining_pct": 0.0
+          }
+        ]
+      },
+      "receipts": [
+        {
+          "query": "flow_edge_count",
+          "params": {},
+          "cypher": "MATCH (:Account)-[f:FLOWS_TO]->(:Account)\nRETURN count(f) AS total"
+        },
+        {
+          "query": "counterparty_volumes",
+          "params": {
+            "ids": [
+              "A17",
+              "A22",
+              "A31",
+              "A47",
+              "A52",
+              "A63",
+              "A68",
+              "A77",
+              "H3"
+            ]
+          },
+          "cypher": "MATCH (a:Account)-[f:FLOWS_TO]-(b:Account)\nWHERE a.id IN $ids\nRETURN a.id AS account, b.id AS counterparty, sum(f.capacity) AS volume"
+        },
+        {
+          "query": "fork_remove_accounts",
+          "params": {
+            "ids": [
+              "A47",
+              "A52"
+            ]
+          },
+          "cypher": "MATCH (a:Account)\nWHERE a.id IN $ids\nDETACH DELETE a"
+        },
+        {
+          "query": "flow_edge_count",
+          "params": {},
+          "cypher": "MATCH (:Account)-[f:FLOWS_TO]->(:Account)\nRETURN count(f) AS total"
+        }
+      ]
+    }
+  ],
+  "proposed_actions": [
+    {
+      "id": "act-1cb431b4",
+      "type": "freeze_accounts",
+      "label": "Freeze 2 accounts (A47, A52) - cuts every route",
+      "account_ids": [
+        "A47",
+        "A52"
+      ],
+      "requires_confirmation": true,
+      "evidence_refs": [
+        "ev-11",
+        "ev-10"
+      ],
+      "simulation": {
+        "capacity_before": 30100.0,
+        "capacity_after": 0.0,
+        "residual_routes": [],
+        "remaining_paths": 0,
+        "verified_on": "fork"
+      }
+    },
+    {
+      "id": "act-fd30e067",
+      "type": "flag_accounts",
+      "label": "Flag and watchlist 5 ring accounts",
+      "account_ids": [
+        "A17",
+        "A22",
+        "A31",
+        "A63",
+        "A68"
+      ],
+      "requires_confirmation": true,
+      "evidence_refs": [
+        "ev-3"
+      ],
+      "simulation": null
+    },
+    {
+      "id": "act-5445277c",
+      "type": "export_case_report",
+      "label": "Export case report",
+      "account_ids": [],
+      "requires_confirmation": false,
+      "evidence_refs": [
+        "ev-3",
+        "ev-5",
+        "ev-6",
+        "ev-8",
+        "ev-9",
+        "ev-10",
+        "ev-11"
+      ],
+      "simulation": null
+    }
+  ],
+  "trace": [
+    {
+      "step": 1,
+      "tool": "account_profile",
+      "args": {
+        "account_id": "A17"
+      },
+      "ok": true,
+      "rows": 1,
+      "duration_ms": 22,
+      "headline": "anomaly rank #7 of 595",
+      "evidence_ids": [
+        "ev-1"
+      ],
+      "error": null
+    },
+    {
+      "step": 2,
+      "tool": "shared_infrastructure",
+      "args": {
+        "account_id": "A17"
+      },
+      "ok": true,
+      "rows": 4,
+      "duration_ms": 2,
+      "headline": "4 linked account(s)",
+      "evidence_ids": [
+        "ev-2"
+      ],
+      "error": null
+    },
+    {
+      "step": 3,
+      "tool": "detect_ring",
+      "args": {
+        "account_ids": [
+          "A17",
+          "A22",
+          "A31",
+          "A47",
+          "A63"
+        ]
+      },
+      "ok": true,
+      "rows": 1,
+      "duration_ms": 26,
+      "headline": "7 accounts - mule ring",
+      "evidence_ids": [
+        "ev-3"
+      ],
+      "error": null
+    },
+    {
+      "step": 4,
+      "tool": "layering_scan",
+      "args": {
+        "account_ids": [
+          "A17",
+          "A22",
+          "A31",
+          "A47",
+          "A52",
+          "A63",
+          "A68"
+        ]
+      },
+      "ok": true,
+      "rows": 15,
+      "duration_ms": 5,
+      "headline": "26 pass-through transfer(s)",
+      "evidence_ids": [
+        "ev-4"
+      ],
+      "error": null
+    },
+    {
+      "step": 5,
+      "tool": "money_trail",
+      "args": {
+        "src": "A17",
+        "dst": "H3"
+      },
+      "ok": true,
+      "rows": 5,
+      "duration_ms": 13,
+      "headline": "5 route(s), 4 time-ordered",
+      "evidence_ids": [
+        "ev-5",
+        "ev-6",
+        "ev-7",
+        "ev-8",
+        "ev-9"
+      ],
+      "error": null
+    },
+    {
+      "step": 6,
+      "tool": "laundering_capacity",
+      "args": {
+        "entry_ids": [
+          "A17",
+          "A63",
+          "A68"
+        ],
+        "hub_ids": [
+          "H3"
+        ]
+      },
+      "ok": true,
+      "rows": 10,
+      "duration_ms": 353,
+      "headline": "capacity $30,100 (python)",
+      "evidence_ids": [
+        "ev-10"
+      ],
+      "error": null
+    },
+    {
+      "step": 7,
+      "tool": "plan_minimum_freeze",
+      "args": {
+        "entry_ids": [
+          "A17",
+          "A63",
+          "A68"
+        ],
+        "hub_ids": [
+          "H3"
+        ]
+      },
+      "ok": true,
+      "rows": 3,
+      "duration_ms": 1140,
+      "headline": "freeze A47, A52 -> $0 left",
+      "evidence_ids": [
+        "ev-11"
+      ],
+      "error": null
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {
+        "id": "A17",
+        "label": "Account",
+        "type": "personal",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.455,
+        "x_hint": 0.0,
+        "y_hint": 0.5
+      },
+      {
+        "id": "A47",
+        "label": "Account",
+        "type": "personal",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.527,
+        "x_hint": 0.75,
+        "y_hint": 0.5
+      },
+      {
+        "id": "A52",
+        "label": "Account",
+        "type": "personal",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.462,
+        "x_hint": null,
+        "y_hint": null
+      },
+      {
+        "id": "A63",
+        "label": "Account",
+        "type": "personal",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.506,
+        "x_hint": 0.25,
+        "y_hint": 0.5
+      },
+      {
+        "id": "A68",
+        "label": "Account",
+        "type": "personal",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.424,
+        "x_hint": null,
+        "y_hint": null
+      },
+      {
+        "id": "H3",
+        "label": "Account",
+        "type": "business",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.301,
+        "x_hint": 1.0,
+        "y_hint": 0.5
+      },
+      {
+        "id": "A31",
+        "label": "Account",
+        "type": "personal",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.456,
+        "x_hint": 0.5,
+        "y_hint": 0.5
+      },
+      {
+        "id": "A77",
+        "label": "Account",
+        "type": "personal",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.389,
+        "x_hint": null,
+        "y_hint": null
+      },
+      {
+        "id": "A22",
+        "label": "Account",
+        "type": "personal",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.406,
+        "x_hint": null,
+        "y_hint": null
+      },
+      {
+        "id": "D-901",
+        "label": "Device",
+        "type": null,
+        "kind": "mobile",
+        "status": null,
+        "anomaly_score": null,
+        "x_hint": null,
+        "y_hint": null
+      },
+      {
+        "id": "D-902",
+        "label": "Device",
+        "type": null,
+        "kind": "mobile",
+        "status": null,
+        "anomaly_score": null,
+        "x_hint": null,
+        "y_hint": null
+      },
+      {
+        "id": "D-903",
+        "label": "Device",
+        "type": null,
+        "kind": "mobile",
+        "status": null,
+        "anomaly_score": null,
+        "x_hint": null,
+        "y_hint": null
+      },
+      {
+        "id": "IP-901",
+        "label": "IPAddress",
+        "type": null,
+        "kind": null,
+        "status": null,
+        "anomaly_score": null,
+        "x_hint": null,
+        "y_hint": null
+      },
+      {
+        "id": "IP-902",
+        "label": "IPAddress",
+        "type": null,
+        "kind": null,
+        "status": null,
+        "anomaly_score": null,
+        "x_hint": null,
+        "y_hint": null
+      },
+      {
+        "id": "A114",
+        "label": "Account",
+        "type": "personal",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.312,
+        "x_hint": null,
+        "y_hint": null
+      },
+      {
+        "id": "A115",
+        "label": "Account",
+        "type": "personal",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.261,
+        "x_hint": null,
+        "y_hint": null
+      },
+      {
+        "id": "A116",
+        "label": "Account",
+        "type": "personal",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.295,
+        "x_hint": null,
+        "y_hint": null
+      },
+      {
+        "id": "A111",
+        "label": "Account",
+        "type": "personal",
+        "kind": null,
+        "status": "active",
+        "anomaly_score": 0.275,
+        "x_hint": null,
+        "y_hint": null
+      }
+    ],
+    "edges": [
+      {
+        "id": "T-07921",
+        "source": "A111",
+        "target": "A17",
+        "type": "TRANSFER",
+        "amount": 4800.0,
+        "ts": "2026-10-14T09:05:00Z",
+        "channel": "upi"
+      },
+      {
+        "id": "T-07926",
+        "source": "A114",
+        "target": "A63",
+        "type": "TRANSFER",
+        "amount": 4500.0,
+        "ts": "2026-10-14T09:20:00Z",
+        "channel": "upi"
+      },
+      {
+        "id": "T-07960",
+        "source": "A115",
+        "target": "A63",
+        "type": "TRANSFER",
+        "amount": 3800.0,
+        "ts": "2026-10-14T10:05:00Z",
+        "channel": "upi"
+      },
+      {
+        "id": "T-07945",
+        "source": "A116",
+        "target": "A68",
+        "type": "TRANSFER",
+        "amount": 5600.0,
+        "ts": "2026-10-14T09:45:00Z",
+        "channel": "upi"
+      },
+      {
+        "id": "T-08015",
+        "source": "A77",
+        "target": "H3",
+        "type": "TRANSFER",
+        "amount": 2490.0,
+        "ts": "2026-10-14T11:21:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07957",
+        "source": "A17",
+        "target": "A22",
+        "type": "TRANSFER",
+        "amount": 4600.0,
+        "ts": "2026-10-14T10:02:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07970",
+        "source": "A17",
+        "target": "A63",
+        "type": "TRANSFER",
+        "amount": 3500.0,
+        "ts": "2026-10-14T10:20:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07988",
+        "source": "A17",
+        "target": "A68",
+        "type": "TRANSFER",
+        "amount": 2700.0,
+        "ts": "2026-10-14T10:45:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-08006",
+        "source": "A17",
+        "target": "A22",
+        "type": "TRANSFER",
+        "amount": 4500.0,
+        "ts": "2026-10-14T11:10:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-08021",
+        "source": "A17",
+        "target": "A63",
+        "type": "TRANSFER",
+        "amount": 3300.0,
+        "ts": "2026-10-14T11:30:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07966",
+        "source": "A22",
+        "target": "A31",
+        "type": "TRANSFER",
+        "amount": 4480.0,
+        "ts": "2026-10-14T10:14:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-08018",
+        "source": "A22",
+        "target": "A31",
+        "type": "TRANSFER",
+        "amount": 4390.0,
+        "ts": "2026-10-14T11:24:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07944",
+        "source": "A31",
+        "target": "A47",
+        "type": "TRANSFER",
+        "amount": 4270.0,
+        "ts": "2026-10-14T09:44:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07977",
+        "source": "A31",
+        "target": "A47",
+        "type": "TRANSFER",
+        "amount": 4370.0,
+        "ts": "2026-10-14T10:27:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-08026",
+        "source": "A31",
+        "target": "A47",
+        "type": "TRANSFER",
+        "amount": 4280.0,
+        "ts": "2026-10-14T11:36:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-08035",
+        "source": "A31",
+        "target": "A47",
+        "type": "TRANSFER",
+        "amount": 3140.0,
+        "ts": "2026-10-14T11:55:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07948",
+        "source": "A47",
+        "target": "H3",
+        "type": "TRANSFER",
+        "amount": 4160.0,
+        "ts": "2026-10-14T09:52:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07971",
+        "source": "A47",
+        "target": "H3",
+        "type": "TRANSFER",
+        "amount": 5190.0,
+        "ts": "2026-10-14T10:22:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07983",
+        "source": "A47",
+        "target": "H3",
+        "type": "TRANSFER",
+        "amount": 4260.0,
+        "ts": "2026-10-14T10:39:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07995",
+        "source": "A47",
+        "target": "H3",
+        "type": "TRANSFER",
+        "amount": 3250.0,
+        "ts": "2026-10-14T10:58:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-08033",
+        "source": "A47",
+        "target": "H3",
+        "type": "TRANSFER",
+        "amount": 4170.0,
+        "ts": "2026-10-14T11:47:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-08038",
+        "source": "A47",
+        "target": "H3",
+        "type": "TRANSFER",
+        "amount": 3060.0,
+        "ts": "2026-10-14T12:06:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07964",
+        "source": "A52",
+        "target": "A47",
+        "type": "TRANSFER",
+        "amount": 5320.0,
+        "ts": "2026-10-14T10:11:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07979",
+        "source": "A52",
+        "target": "A77",
+        "type": "TRANSFER",
+        "amount": 3520.0,
+        "ts": "2026-10-14T10:30:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07989",
+        "source": "A52",
+        "target": "A47",
+        "type": "TRANSFER",
+        "amount": 3330.0,
+        "ts": "2026-10-14T10:45:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-08002",
+        "source": "A52",
+        "target": "A77",
+        "type": "TRANSFER",
+        "amount": 2490.0,
+        "ts": "2026-10-14T11:08:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07933",
+        "source": "A63",
+        "target": "A31",
+        "type": "TRANSFER",
+        "amount": 4380.0,
+        "ts": "2026-10-14T09:31:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07967",
+        "source": "A63",
+        "target": "A52",
+        "type": "TRANSFER",
+        "amount": 3700.0,
+        "ts": "2026-10-14T10:17:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07980",
+        "source": "A63",
+        "target": "A52",
+        "type": "TRANSFER",
+        "amount": 3410.0,
+        "ts": "2026-10-14T10:33:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-08028",
+        "source": "A63",
+        "target": "A31",
+        "type": "TRANSFER",
+        "amount": 3220.0,
+        "ts": "2026-10-14T11:41:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07953",
+        "source": "A68",
+        "target": "A52",
+        "type": "TRANSFER",
+        "amount": 5450.0,
+        "ts": "2026-10-14T09:58:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "T-07994",
+        "source": "A68",
+        "target": "A52",
+        "type": "TRANSFER",
+        "amount": 2630.0,
+        "ts": "2026-10-14T10:57:00Z",
+        "channel": "imps"
+      },
+      {
+        "id": "U:A17:D-901",
+        "source": "A17",
+        "target": "D-901",
+        "type": "USED_DEVICE",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A17:D-902",
+        "source": "A17",
+        "target": "D-902",
+        "type": "USED_DEVICE",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A17:IP-901",
+        "source": "A17",
+        "target": "IP-901",
+        "type": "USED_IP",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A22:D-901",
+        "source": "A22",
+        "target": "D-901",
+        "type": "USED_DEVICE",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A22:IP-901",
+        "source": "A22",
+        "target": "IP-901",
+        "type": "USED_IP",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A31:D-902",
+        "source": "A31",
+        "target": "D-902",
+        "type": "USED_DEVICE",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A31:IP-901",
+        "source": "A31",
+        "target": "IP-901",
+        "type": "USED_IP",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A47:D-902",
+        "source": "A47",
+        "target": "D-902",
+        "type": "USED_DEVICE",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A47:D-903",
+        "source": "A47",
+        "target": "D-903",
+        "type": "USED_DEVICE",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A47:IP-902",
+        "source": "A47",
+        "target": "IP-902",
+        "type": "USED_IP",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A52:D-903",
+        "source": "A52",
+        "target": "D-903",
+        "type": "USED_DEVICE",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A52:IP-902",
+        "source": "A52",
+        "target": "IP-902",
+        "type": "USED_IP",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A63:D-901",
+        "source": "A63",
+        "target": "D-901",
+        "type": "USED_DEVICE",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A63:IP-902",
+        "source": "A63",
+        "target": "IP-902",
+        "type": "USED_IP",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A68:D-903",
+        "source": "A68",
+        "target": "D-903",
+        "type": "USED_DEVICE",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      },
+      {
+        "id": "U:A68:IP-902",
+        "source": "A68",
+        "target": "IP-902",
+        "type": "USED_IP",
+        "amount": null,
+        "ts": null,
+        "channel": null
+      }
+    ],
+    "highlight": {
+      "paths": [
+        [
+          "A17",
+          "A63",
+          "A31",
+          "A47",
+          "H3"
+        ],
+        [
+          "A17",
+          "A63",
+          "A52",
+          "A77",
+          "H3"
+        ],
+        [
+          "A17",
+          "A68",
+          "A52",
+          "A77",
+          "H3"
+        ],
+        [
+          "A17",
+          "A63",
+          "A52",
+          "A47",
+          "H3"
+        ]
+      ],
+      "communities": [
+        [
+          "A17",
+          "A22",
+          "A31",
+          "A47",
+          "A52",
+          "A63",
+          "A68"
+        ]
+      ],
+      "infrastructure_clusters": [],
+      "freeze_plan": [
+        "A47",
+        "A52"
+      ],
+      "flows": [
+        [
+          "A47",
+          "H3"
+        ],
+        [
+          "A31",
+          "A47"
+        ],
+        [
+          "A52",
+          "A47"
+        ],
+        [
+          "A17",
+          "A22"
+        ],
+        [
+          "A22",
+          "A31"
+        ],
+        [
+          "A63",
+          "A31"
+        ],
+        [
+          "A68",
+          "A52"
+        ],
+        [
+          "A63",
+          "A52"
+        ],
+        [
+          "A52",
+          "A77"
+        ],
+        [
+          "A77",
+          "H3"
+        ]
+      ],
+      "frozen": []
+    }
+  },
+  "meta": {
+    "mode": "rule_based",
+    "model": null,
+    "narrative_source": "deterministic",
+    "tool_iterations": 7,
+    "latency_ms": 1610,
+    "maxflow_engine": "python",
+    "frozen_accounts": [],
+    "notes": []
+  }
+}

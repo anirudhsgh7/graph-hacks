@@ -1,0 +1,346 @@
+{
+  "nodes": [
+    {
+      "id": "A17",
+      "label": "Account",
+      "type": "personal",
+      "kind": null,
+      "status": "active",
+      "anomaly_score": 0.455,
+      "x_hint": null,
+      "y_hint": null
+    },
+    {
+      "id": "A110",
+      "label": "Account",
+      "type": "personal",
+      "kind": null,
+      "status": "active",
+      "anomaly_score": 0.3,
+      "x_hint": null,
+      "y_hint": null
+    },
+    {
+      "id": "A111",
+      "label": "Account",
+      "type": "personal",
+      "kind": null,
+      "status": "active",
+      "anomaly_score": 0.275,
+      "x_hint": null,
+      "y_hint": null
+    },
+    {
+      "id": "A112",
+      "label": "Account",
+      "type": "personal",
+      "kind": null,
+      "status": "active",
+      "anomaly_score": 0.299,
+      "x_hint": null,
+      "y_hint": null
+    },
+    {
+      "id": "A113",
+      "label": "Account",
+      "type": "personal",
+      "kind": null,
+      "status": "active",
+      "anomaly_score": 0.302,
+      "x_hint": null,
+      "y_hint": null
+    },
+    {
+      "id": "A22",
+      "label": "Account",
+      "type": "personal",
+      "kind": null,
+      "status": "active",
+      "anomaly_score": 0.406,
+      "x_hint": null,
+      "y_hint": null
+    },
+    {
+      "id": "A80",
+      "label": "Account",
+      "type": "personal",
+      "kind": null,
+      "status": "active",
+      "anomaly_score": 0.151,
+      "x_hint": null,
+      "y_hint": null
+    },
+    {
+      "id": "A63",
+      "label": "Account",
+      "type": "personal",
+      "kind": null,
+      "status": "active",
+      "anomaly_score": 0.506,
+      "x_hint": null,
+      "y_hint": null
+    },
+    {
+      "id": "A81",
+      "label": "Account",
+      "type": "personal",
+      "kind": null,
+      "status": "active",
+      "anomaly_score": 0.147,
+      "x_hint": null,
+      "y_hint": null
+    },
+    {
+      "id": "A82",
+      "label": "Account",
+      "type": "personal",
+      "kind": null,
+      "status": "active",
+      "anomaly_score": 0.142,
+      "x_hint": null,
+      "y_hint": null
+    },
+    {
+      "id": "A68",
+      "label": "Account",
+      "type": "personal",
+      "kind": null,
+      "status": "active",
+      "anomaly_score": 0.424,
+      "x_hint": null,
+      "y_hint": null
+    },
+    {
+      "id": "A83",
+      "label": "Account",
+      "type": "personal",
+      "kind": null,
+      "status": "active",
+      "anomaly_score": 0.138,
+      "x_hint": null,
+      "y_hint": null
+    },
+    {
+      "id": "A84",
+      "label": "Account",
+      "type": "personal",
+      "kind": null,
+      "status": "active",
+      "anomaly_score": 0.133,
+      "x_hint": null,
+      "y_hint": null
+    },
+    {
+      "id": "A85",
+      "label": "Account",
+      "type": "personal",
+      "kind": null,
+      "status": "active",
+      "anomaly_score": 0.129,
+      "x_hint": null,
+      "y_hint": null
+    },
+    {
+      "id": "A86",
+      "label": "Account",
+      "type": "personal",
+      "kind": null,
+      "status": "active",
+      "anomaly_score": 0.055,
+      "x_hint": null,
+      "y_hint": null
+    },
+    {
+      "id": "A87",
+      "label": "Account",
+      "type": "personal",
+      "kind": null,
+      "status": "active",
+      "anomaly_score": 0.055,
+      "x_hint": null,
+      "y_hint": null
+    },
+    {
+      "id": "A88",
+      "label": "Account",
+      "type": "personal",
+      "kind": null,
+      "status": "active",
+      "anomaly_score": 0.055,
+      "x_hint": null,
+      "y_hint": null
+    }
+  ],
+  "edges": [
+    {
+      "id": "T-07907",
+      "source": "A110",
+      "target": "A17",
+      "type": "TRANSFER",
+      "amount": 5200.0,
+      "ts": "2026-10-14T08:40:00Z",
+      "channel": "upi"
+    },
+    {
+      "id": "T-07921",
+      "source": "A111",
+      "target": "A17",
+      "type": "TRANSFER",
+      "amount": 4800.0,
+      "ts": "2026-10-14T09:05:00Z",
+      "channel": "upi"
+    },
+    {
+      "id": "T-07932",
+      "source": "A112",
+      "target": "A17",
+      "type": "TRANSFER",
+      "amount": 6100.0,
+      "ts": "2026-10-14T09:30:00Z",
+      "channel": "upi"
+    },
+    {
+      "id": "T-07947",
+      "source": "A113",
+      "target": "A17",
+      "type": "TRANSFER",
+      "amount": 3900.0,
+      "ts": "2026-10-14T09:50:00Z",
+      "channel": "upi"
+    },
+    {
+      "id": "T-07957",
+      "source": "A17",
+      "target": "A22",
+      "type": "TRANSFER",
+      "amount": 4600.0,
+      "ts": "2026-10-14T10:02:00Z",
+      "channel": "imps"
+    },
+    {
+      "id": "T-07962",
+      "source": "A17",
+      "target": "A80",
+      "type": "TRANSFER",
+      "amount": 120.0,
+      "ts": "2026-10-14T10:08:00Z",
+      "channel": "imps"
+    },
+    {
+      "id": "T-07970",
+      "source": "A17",
+      "target": "A63",
+      "type": "TRANSFER",
+      "amount": 3500.0,
+      "ts": "2026-10-14T10:20:00Z",
+      "channel": "imps"
+    },
+    {
+      "id": "T-07975",
+      "source": "A17",
+      "target": "A81",
+      "type": "TRANSFER",
+      "amount": 150.0,
+      "ts": "2026-10-14T10:26:00Z",
+      "channel": "imps"
+    },
+    {
+      "id": "T-07982",
+      "source": "A17",
+      "target": "A82",
+      "type": "TRANSFER",
+      "amount": 180.0,
+      "ts": "2026-10-14T10:39:00Z",
+      "channel": "imps"
+    },
+    {
+      "id": "T-07988",
+      "source": "A17",
+      "target": "A68",
+      "type": "TRANSFER",
+      "amount": 2700.0,
+      "ts": "2026-10-14T10:45:00Z",
+      "channel": "imps"
+    },
+    {
+      "id": "T-07991",
+      "source": "A17",
+      "target": "A83",
+      "type": "TRANSFER",
+      "amount": 210.0,
+      "ts": "2026-10-14T10:51:00Z",
+      "channel": "imps"
+    },
+    {
+      "id": "T-07998",
+      "source": "A17",
+      "target": "A84",
+      "type": "TRANSFER",
+      "amount": 240.0,
+      "ts": "2026-10-14T11:02:00Z",
+      "channel": "imps"
+    },
+    {
+      "id": "T-08006",
+      "source": "A17",
+      "target": "A22",
+      "type": "TRANSFER",
+      "amount": 4500.0,
+      "ts": "2026-10-14T11:10:00Z",
+      "channel": "imps"
+    },
+    {
+      "id": "T-08011",
+      "source": "A17",
+      "target": "A85",
+      "type": "TRANSFER",
+      "amount": 270.0,
+      "ts": "2026-10-14T11:17:00Z",
+      "channel": "imps"
+    },
+    {
+      "id": "T-08021",
+      "source": "A17",
+      "target": "A63",
+      "type": "TRANSFER",
+      "amount": 3300.0,
+      "ts": "2026-10-14T11:30:00Z",
+      "channel": "imps"
+    },
+    {
+      "id": "T-08025",
+      "source": "A17",
+      "target": "A86",
+      "type": "TRANSFER",
+      "amount": 300.0,
+      "ts": "2026-10-14T11:36:00Z",
+      "channel": "imps"
+    },
+    {
+      "id": "T-08030",
+      "source": "A17",
+      "target": "A87",
+      "type": "TRANSFER",
+      "amount": 330.0,
+      "ts": "2026-10-14T11:44:00Z",
+      "channel": "imps"
+    },
+    {
+      "id": "T-08036",
+      "source": "A17",
+      "target": "A88",
+      "type": "TRANSFER",
+      "amount": 360.0,
+      "ts": "2026-10-14T11:58:00Z",
+      "channel": "imps"
+    }
+  ],
+  "highlight": {
+    "paths": [],
+    "communities": [],
+    "infrastructure_clusters": [],
+    "freeze_plan": [],
+    "flows": [],
+    "frozen": []
+  }
+}
