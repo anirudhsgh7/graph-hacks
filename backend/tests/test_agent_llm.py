@@ -217,3 +217,42 @@ def test_token_budget_of_a_full_investigation(llm):
     assert p["meta"]["narrative_source"] == "llm" and len(llm.REQUESTS) == 4
     chars = sum(len(json.dumps({"m": r["messages"], "t": r.get("tools")}, separators=(",", ":"))) for r in llm.REQUESTS)
     assert chars / 3.5 < 8000, f"~{chars / 3.5:.0f} input tokens"
+
+
+def test_early_stop_is_nudged_once_for_the_freeze_plan(llm):
+    """A confirmed mule ring without capacity/freeze-plan evidence gets exactly one
+    forced turn to call the money tools before an early answer is accepted."""
+    final = {"conclusion": "suspicious", "summary": "Ring found; plan attached.",
+             "findings": [{"title": "Ring", "detail": "7 accounts", "confidence": 0.9, "evidence_refs": ["ev-3"]}]}
+    llm.SCRIPT.extend([
+        RING_SCRIPT[0], RING_SCRIPT[1],                     # profile + shared, then ring (ev-3)
+        reply_text("I already have enough."),               # early stop -> nudge
+        reply_tools(tool_call("n1", "laundering_capacity",
+                              {"entry_ids": ["A17", "A63", "A68"], "hub_ids": ["H3"]}),
+                    tool_call("n2", "plan_minimum_freeze",
+                              {"entry_ids": ["A17", "A63", "A68"], "hub_ids": ["H3"]})),
+        reply_text(json.dumps(final)),
+    ])
+    p = _investigate()
+    assert p["meta"]["mode"] == "llm" and p["meta"]["narrative_source"] == "llm"
+    assert any("asked once" in n for n in p["meta"]["notes"])
+    assert any(e["type"] == "freeze_plan" for e in p["evidence"])
+    nudge = llm.REQUESTS[3]["messages"][-1]                 # request sent right after the early stop
+    assert nudge["role"] == "user" and "freeze plan" in nudge["content"]
+
+
+def test_turns_exhausted_without_the_plan_are_completed_by_the_planner(llm):
+    """Wandering models: if the tool turns run out before the freeze plan, the planner
+    fills the missing steps - a confirmed ring never ships without capacity + plan."""
+    final = {"conclusion": "suspicious", "summary": "Ring and plan.",
+             "findings": [{"title": "Ring", "detail": "7 accounts", "confidence": 0.9, "evidence_refs": ["ev-3"]}]}
+    filler = reply_tools(tool_call("f1", "account_profile", {"account_id": "A17"}))  # cached repeat
+    llm.SCRIPT.extend([RING_SCRIPT[0], RING_SCRIPT[1],
+                       filler, filler, filler, filler,      # all 6 turns, never the money tools
+                       reply_text(json.dumps(final))])
+    p = _investigate()
+    assert p["meta"]["mode"] == "llm"
+    assert any("completed the missing steps" in n for n in p["meta"]["notes"])
+    assert any(e["type"] == "freeze_plan" for e in p["evidence"])
+    freeze = next(a for a in p["proposed_actions"] if a["type"] == "freeze_accounts")
+    assert freeze["account_ids"] == ["A47", "A52"]

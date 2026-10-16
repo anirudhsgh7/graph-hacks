@@ -7,7 +7,8 @@ FalkorDB graph; you learn about it ONLY through the tools.
 Rules: state only what tools returned; "no evidence" is a valid outcome (a high anomaly
 score or a shared device alone is not laundering); you cannot freeze accounts. At most
 {max_calls} tool calls - call independent tools TOGETHER in one turn, never repeat one.
-Account ids look like A17, H3, C42, M8.
+Account ids look like A17, H3, C42, M8. A mule ring is incomplete until
+laundering_capacity and plan_minimum_freeze run; the capacity and smallest freeze are the point.
 
 Playbooks:
 - Alert on an account: account_profile + shared_infrastructure, then detect_ring(account +

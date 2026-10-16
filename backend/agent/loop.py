@@ -161,7 +161,7 @@ def _walk(obj: Any, key: str):
 
 
 def _llm_investigation(s: _Session, chat: ChatSession, question: str, context: str,
-                       notes: list[str]) -> _Answer | None:
+                       notes: list[str], seed: str | None) -> _Answer | None:
     """Tool selection by the model, then a separate, small narration request.
 
     Token budget matters (free tiers allow a few thousand tokens per minute), so the model
@@ -172,6 +172,7 @@ def _llm_investigation(s: _Session, chat: ChatSession, question: str, context: s
         {"role": "user", "content": f"{context}\n\nQuestion: {question}"},
     ]
     specs = openai_tool_specs()
+    nudged = False
     for _turn in range(settings.agent_max_turns):
         if s.over_budget():
             notes.append("time budget reached during tool selection")
@@ -183,9 +184,22 @@ def _llm_investigation(s: _Session, chat: ChatSession, question: str, context: s
             # Best case: the model's last turn already is the answer (saves a whole request).
             if s.run.evidence.all():
                 try:
-                    return _parse_answer(msg.get("content") or "")
+                    answer: _Answer | None = _parse_answer(msg.get("content") or "")
                 except (ValueError, ValidationError, json.JSONDecodeError):
-                    pass  # fall through to the dedicated narration request
+                    answer = None  # fall through to the dedicated narration request
+                if answer is not None and (nudged or not _missing_freeze_plan(s)):
+                    _complete_with_planner(s, seed, notes)
+                    return answer
+            # One bounded nudge: a confirmed mule ring without the capacity measurement and
+            # freeze plan is incomplete, so ask for the missing tools exactly once.
+            if not nudged and _missing_freeze_plan(s):
+                nudged = True
+                notes.append("the model stopped before the freeze plan; asked once for it")
+                messages.append({"role": "user", "content":
+                                 "A mule ring is confirmed but no capacity measurement or freeze plan is in "
+                                 "yet. Call laundering_capacity and plan_minimum_freeze for its entry points "
+                                 "and cash-out hub now, then answer."})
+                continue
             break
         for c in calls:
             name = c["function"]["name"]
@@ -195,6 +209,9 @@ def _llm_investigation(s: _Session, chat: ChatSession, question: str, context: s
             except json.JSONDecodeError:
                 out = {"error": "arguments were not valid JSON"}
             messages.append({"role": "tool", "tool_call_id": c["id"], "content": dumps(digest(name, out))})
+    # Deterministic backstop for every exit above (answer accepted, turns exhausted,
+    # early stop refused): a confirmed ring never ships without its capacity + plan.
+    _complete_with_planner(s, seed, notes)
     if not s.run.evidence.all():
         return None
     final = [
@@ -225,6 +242,24 @@ def _validated_findings(answer: _Answer, s: _Session) -> list[dict]:
     return out
 
 
+def _missing_freeze_plan(s: _Session) -> bool:
+    """A mule ring was measured but no freeze plan exists yet - the paying-off part of
+    the investigation (free models sometimes answer before calling the money tools)."""
+    evidence = s.run.evidence.all()
+    ring = any(e.type == "community" and e.result_excerpt.get("verdict") == "mule_ring" for e in evidence)
+    plan = any(e.type == "freeze_plan" for e in evidence)
+    return ring and not plan
+
+
+def _complete_with_planner(s: _Session, seed: str | None, notes: list[str]) -> None:
+    """Guarantee for a confirmed mule ring: if the model's run ends (answered early, turns
+    ran out) before the capacity/freeze plan exist, the deterministic playbook fills only
+    the missing steps. No extra model calls; cached repeated calls are skipped."""
+    if seed and _missing_freeze_plan(s):
+        notes.append("the model did not reach the freeze plan; the planner completed the missing steps")
+        planner.investigate(s.run, seed, s.step)
+
+
 def investigate(db: Database, question: str, case_id: str | None = None,
                 on_event: EventSink | None = None) -> dict:
     question = (question or "").strip()
@@ -253,7 +288,8 @@ def investigate(db: Database, question: str, case_id: str | None = None,
     if chat.enabled:
         mode = "llm"
         try:
-            answer = _llm_investigation(s, chat, question, context, notes)
+            answer = _llm_investigation(s, chat, question, context, notes,
+                                        seeds[0] if seeds else None)
         except LLMError as exc:
             notes.append(f"{exc.code}: {exc}")
             log.warning("LLM failed: %s", exc)
