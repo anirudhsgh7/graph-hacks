@@ -9,8 +9,9 @@ Agent-driven AML investigation console built for **Graph Hacks: Context for AI A
 - capacity + minimum freeze → `algo.maxFlow` + a min-vertex-cut planner, proven by re-running
   the algorithms on a `GRAPH.COPY` fork before anything is frozen
 
-> **Status:** Day 2 — the backend (seed + tools + agent + tests) is delivered; the frontend runs
-> end-to-end in mock mode against the recorded backend responses and flips to live with one env var.
+> **Status:** Day 3 — the stack is hosted live (Vercel ⟷ Render ⟷ FalkorDB Cloud) with the agent
+> loop on OpenRouter free models; the frontend also runs fully in mock mode against recorded
+> backend responses and flips to live with one env var.
 >
 > **📄 Everything about this project lives in [`plan.md`](./plan.md)** — architecture, data model,
 > API contract, UI guide, demo scenarios, and the phase-by-phase build plan. The authoritative API
@@ -48,11 +49,11 @@ docker compose up -d                      # FalkorDB on :6379, FalkorDB Browser 
 cd backend
 python3.13 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-cp .env.example .env                      # add LLM_API_KEY for Groq, or leave empty for rule-based mode
+cp .env.example .env                      # add LLM_API_KEY (OpenRouter), or leave empty for rule-based mode
 
 python -m seed.load --verify              # build the demo graph, run the ground-truth checks
 uvicorn app.main:app --reload --port 8000 # API at http://localhost:8000, docs at /docs
-pytest -q                                 # 27 tests against the running FalkorDB
+pytest -q                                 # 34 tests against the running FalkorDB
 ```
 
 Then set `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000` in `frontend/.env.local` (and

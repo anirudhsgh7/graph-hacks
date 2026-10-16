@@ -4,7 +4,7 @@
 > and what happens next. Supersedes the earlier planning brief (`HACKATHON_DISCUSSION.pdf`) and the old
 > `docs/` folder — everything important from those now lives here.
 
-**Last updated:** Oct 16, 2026 (Day 2 — backend delivered, frontend integrated against contract v1.1)
+**Last updated:** Oct 17, 2026 (Day 3 — LLM provider switched to OpenRouter free models on local and hosted stacks)
 
 | | |
 |---|---|
@@ -74,7 +74,8 @@ is this capability table — every product feature is a native graph operation, 
   to live with one environment variable.
 - **Backend** — FastAPI (Python 3.11+) with the FalkorDB client. Agent loop: LLM plans → calls graph tools →
   collects evidence → writes findings + proposes actions → returns one typed JSON response. Hosted LLM
-  behind an OpenAI-compatible endpoint (default: **Groq** `openai/gpt-oss-120b`; fully env-configurable).
+  behind an OpenAI-compatible endpoint (hosted: **OpenRouter** free models — `nvidia/nemotron-3-super-120b-a12b:free`
+  with a fallback model; fully env-configurable).
   With no key, or if the provider fails, a rule-based investigator runs the same tools — the demo never
   depends on the LLM. Actions are derived by the server from evidence, never written by the model.
 - **Database** — FalkorDB: Cypher over a property graph, native graph algorithms via `algo.*`, Redis-based.
@@ -345,7 +346,7 @@ point the variable at the FastAPI service; no component changes are needed.
 |---|---|---|
 | `plan.md` | **This document** — single source of truth | both |
 | `frontend/` | Next.js investigation console (mock-first) | frontend lead |
-| `backend/` | FastAPI agent loop + FalkorDB tool layer + seed generator + 27 tests | AI/backend lead |
+| `backend/` | FastAPI agent loop + FalkorDB tool layer + seed generator + 34 tests | AI/backend lead |
 | `backend/docs/api-contract.md` | Authoritative API contract v1.1 + changelog | both |
 | `queries/` | Annotated Cypher the backend runs by name (submission requirement) | AI/backend lead |
 | `render.yaml`, `docker-compose.yml` | Render blueprint + local FalkorDB | AI/backend lead |
@@ -381,11 +382,11 @@ docker compose up -d                     # FalkorDB on :6379, Browser on :3080
 cd backend
 python3.13 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-cp .env.example .env                     # add LLM_API_KEY for Groq, or leave empty for rule-based mode
+cp .env.example .env                     # add LLM_API_KEY (OpenRouter), or leave empty for rule-based mode
 
 python -m seed.load --verify             # rebuild the demo graph, run the 17 ground-truth checks
 uvicorn app.main:app --reload --port 8000
-pytest -q                                # 27 tests (uses graph "ftm_test", never the demo graph)
+pytest -q                                # 34 tests (uses graph "ftm_test", never the demo graph)
 ```
 
 > Docker note: the frontend machine runs **Colima** (`brew install colima docker docker-compose`)
@@ -409,7 +410,7 @@ pytest -q                                # 27 tests (uses graph "ftm_test", neve
 | Piece | Where | Notes |
 |---|---|---|
 | Frontend | **Vercel** (Hobby) — live at `graph-hacks-cyan.vercel.app` | root directory `frontend/`; env: `NEXT_PUBLIC_API_BASE_URL` + `NEXT_PUBLIC_BACKEND_API_TOKEN` (rebuild needed after any change) |
-| Backend | **Render** (free tier) — live at `follow-the-money-api.onrender.com` | cold start ~50 s after ~15 min idle — warm before any demo; `BACKEND_API_TOKEN` is Render-generated; CORS allows the Vercel origin |
+| Backend | **Render** (free tier) — live at `follow-the-money-api.onrender.com` | cold start ~50 s after ~15 min idle — warm before any demo; `BACKEND_API_TOKEN` is Render-generated; CORS allows the Vercel origin; LLM = OpenRouter free models pinned in `render.yaml` (keys dashboard-set, `sync: false`) |
 | Database | **FalkorDB Cloud free tier** (AWS ap-south-1; credentials in `backend/.env.cloud`, git-ignored) + **local Docker** for dev | Cloud limits: 100 MB, no TLS, no backups, stopped after 1 day idle, deleted after 7 days → the seed is committed, so the DB is always reproducible |
 
 **Demo-day protocol (repeat before every rehearsal and the real run):**
@@ -491,7 +492,7 @@ Status: ✅ locked · 🟡 drafted (awaiting teammate sign-off) · ⏳ deferred.
 | D1 | Project idea | ✅ | Fraud console — "Follow the Money" (AML investigation console) |
 | D2 | MVP scope + demo scenarios | 🟡 | Full §5 scenarios 1–3 (scenario 4 as stretch) |
 | D3 | Stack | 🟡 | FastAPI + Next.js + Cytoscape.js (frontend already scaffolded) |
-| D4 | LLM runtime + provider | 🟡 | Hosted, env-configurable; Gemini free tier first |
+| D4 | LLM runtime + provider | ✅ | Hosted, env-configurable; **OpenRouter free models** (`nvidia/nemotron-3-super-120b-a12b:free` → `cohere/north-mini-code:free`), chosen by a local tool-calling bake-off Oct 17 |
 | D5 | Database: dev vs demo | 🟡 | Local Docker per laptop + one FalkorDB Cloud instance; reseed before every demo |
 | D6 | API contract | ✅ | v1.1 delivered Oct 16 (`backend/docs/api-contract.md`); recorded responses in `frontend/lib/mocks/`, schema in `backend/openapi.json` |
 | D7 | Responsibilities | 🟡 | Frontend = UI/viz/deploy/video; backend = seed/tools/agent/README tech sections |
@@ -501,7 +502,7 @@ Status: ✅ locked · 🟡 drafted (awaiting teammate sign-off) · ⏳ deferred.
 | D11 | Testing/docs/submission plan | 🟡 | Phase 3 checklist (§11) |
 | D12 | Network visual | 🟡 | 3D by default (two floors: money moving left → right above, shared phones/IPs below); Cytoscape 2D kept as a switch + WebGL fallback (Oct 16) |
 | D14 | Demo UX | 🟡 | Dark "investigation room" default; live agent timeline (SSE) → verdict hero with numbers → graph assembles step by step → freeze moment (capacity drains, "Route cut") → proof strip with algorithm badges; landing hero with the live case-001 network (Oct 16) |
-| D13 | Free-tier LLM | 🟡 | Token-lean loop (~8K/investigation) + retry-after wait + Groq → Gemini fallback; rule-based only if every provider fails (Oct 16) |
+| D13 | Free-tier LLM | ✅ | Token-lean loop (~8K/investigation) + retry-after wait + OpenRouter primary → second free model fallback; hosted `AGENT_BUDGET_S=90` (free models are slow); rule-based only if every provider fails (Oct 17) |
 
 🟡 items are **defaults awaiting the teammate meeting** — one by one, they become ✅ or get re-decided.
 

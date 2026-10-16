@@ -21,20 +21,24 @@ services:
         sync: false
       - key: FALKORDB_TLS
         value: "false"
+      # LLM: OpenRouter free models (primary + fallback). API keys are dashboard-set
+      # (sync: false) — never pin them here.
       - key: LLM_BASE_URL
-        value: https://api.groq.com/openai/v1
+        value: https://openrouter.ai/api/v1
       - key: LLM_MODEL
-        value: openai/gpt-oss-120b
+        value: nvidia/nemotron-3-super-120b-a12b:free
       - key: LLM_API_KEY
         sync: false
-      - key: LLM_REASONING_EFFORT
-        value: low
+      - key: LLM_TIMEOUT_S
+        value: "20"
       - key: LLM_FALLBACK_BASE_URL
-        value: https://generativelanguage.googleapis.com/v1beta/openai
+        value: https://openrouter.ai/api/v1
       - key: LLM_FALLBACK_MODEL
-        value: gemini-flash-lite-latest
+        value: cohere/north-mini-code:free
       - key: LLM_FALLBACK_API_KEY
         sync: false
+      - key: AGENT_BUDGET_S
+        value: "90"
       - key: CORS_ORIGINS
         sync: false
       - key: BACKEND_API_TOKEN

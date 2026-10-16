@@ -54,7 +54,7 @@ Remove FalkorDB and nothing is left: no ring, no trail, no capacity, no plan, no
 flowchart LR
   UI[Next.js console] -- REST / SSE --> API[FastAPI]
   API --> AGENT[Agent loop]
-  AGENT -- tool calls --> LLM[Groq, OpenAI-compatible]
+  AGENT -- tool calls --> LLM[OpenRouter, OpenAI-compatible]
   AGENT -- named Cypher + algo.* --> DB[(FalkorDB)]
   AGENT -. no key / provider down .-> RULES[Rule-based planner]
   RULES --> DB
@@ -134,12 +134,12 @@ docker compose up -d                      # FalkorDB on :6379, FalkorDB Browser 
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-cp .env.example .env                      # add LLM_API_KEY for Groq, or leave empty for rule-based mode
+cp .env.example .env                      # add LLM_API_KEY (OpenRouter), or leave empty for rule-based mode
 
 python -m seed.load --verify              # build the demo graph, then run the 17 ground-truth checks
 uvicorn app.main:app --reload --port 8000 # API at http://localhost:8000, docs at /docs
 
-pytest -q                                 # 27 tests against the running FalkorDB (uses graph "ftm_test")
+pytest -q                                 # 34 tests against the running FalkorDB (uses graph "ftm_test")
 ```
 
 Try it:
