@@ -22,8 +22,9 @@ from typing import Any, Callable
 from pydantic import BaseModel, Field, ValidationError
 
 from agent import actions, graphview, planner, summarize
-from agent.llm import LLMError, chat
-from agent.prompts import FINAL, SYSTEM, case_context
+from agent.digest import digest, dumps, evidence_ledger
+from agent.llm import ChatSession, LLMError
+from agent.prompts import FINAL, NARRATOR, SYSTEM, case_context
 from agent.tools import TOOLS, Run, call_tool, openai_tool_specs
 from app.config import settings
 from graph.db import Database
@@ -65,17 +66,6 @@ def _parse_answer(text: str) -> _Answer:
     if answer.conclusion not in ("suspicious", "no_evidence", "inconclusive"):
         raise ValueError(f"invalid conclusion '{answer.conclusion}'")
     return answer
-
-
-def _compact(value: Any, depth: int = 0) -> Any:
-    """Shrink tool output for the model's context (lists capped, strings trimmed)."""
-    if isinstance(value, dict):
-        return {k: _compact(v, depth + 1) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_compact(v, depth + 1) for v in value[:8]] + ([f"... {len(value) - 8} more"] if len(value) > 8 else [])
-    if isinstance(value, str) and len(value) > 400:
-        return value[:400] + "..."
-    return value
 
 
 def _headline(name: str, out: dict) -> str:
@@ -170,7 +160,13 @@ def _walk(obj: Any, key: str):
             yield from _walk(v, key)
 
 
-def _llm_investigation(s: _Session, question: str, context: str, notes: list[str]) -> _Answer | None:
+def _llm_investigation(s: _Session, chat: ChatSession, question: str, context: str,
+                       notes: list[str]) -> _Answer | None:
+    """Tool selection by the model, then a separate, small narration request.
+
+    Token budget matters (free tiers allow a few thousand tokens per minute), so the model
+    sees digests of tool results (agent/digest.py), and the final request carries only the
+    evidence ledger - not the whole conversation and not the tool schemas."""
     messages: list[dict] = [
         {"role": "system", "content": SYSTEM.format(max_calls=settings.agent_max_tool_calls)},
         {"role": "user", "content": f"{context}\n\nQuestion: {question}"},
@@ -180,16 +176,16 @@ def _llm_investigation(s: _Session, question: str, context: str, notes: list[str
         if s.over_budget():
             notes.append("time budget reached during tool selection")
             break
-        msg = chat(messages, tools=specs)
+        msg = chat.chat(messages, tools=specs)  # ids normalised: history is portable
+        messages.append(msg)
         calls = msg.get("tool_calls") or []
-        assistant: dict[str, Any] = {"role": "assistant", "content": msg.get("content") or ""}
-        if calls:
-            assistant["tool_calls"] = [{"id": c["id"], "type": "function",
-                                        "function": {"name": c["function"]["name"],
-                                                     "arguments": c["function"].get("arguments") or "{}"}}
-                                       for c in calls]
-        messages.append(assistant)
         if not calls:
+            # Best case: the model's last turn already is the answer (saves a whole request).
+            if s.run.evidence.all():
+                try:
+                    return _parse_answer(msg.get("content") or "")
+                except (ValueError, ValidationError, json.JSONDecodeError):
+                    pass  # fall through to the dedicated narration request
             break
         for c in calls:
             name = c["function"]["name"]
@@ -198,19 +194,22 @@ def _llm_investigation(s: _Session, question: str, context: str, notes: list[str
                 out = s.step(name, args) if isinstance(args, dict) else {"error": "arguments must be an object"}
             except json.JSONDecodeError:
                 out = {"error": "arguments were not valid JSON"}
-            messages.append({"role": "tool", "tool_call_id": c["id"],
-                             "content": json.dumps(_compact(out), default=str)})
+            messages.append({"role": "tool", "tool_call_id": c["id"], "content": dumps(digest(name, out))})
     if not s.run.evidence.all():
         return None
-    messages.append({"role": "user", "content": FINAL})
+    final = [
+        {"role": "system", "content": NARRATOR},
+        {"role": "user", "content": f"{context}\n\nQuestion: {question}\n\nEvidence:\n"
+                                    f"{dumps(evidence_ledger(s.run.evidence.all()))}\n\n{FINAL}"},
+    ]
     for attempt in range(2):
-        reply = chat(messages, tools=specs, tool_choice="none")
+        reply = chat.chat(final)
         try:
             return _parse_answer(reply.get("content") or "")
         except (ValueError, ValidationError, json.JSONDecodeError) as exc:
             if attempt == 0:
-                messages.append({"role": "assistant", "content": reply.get("content") or ""})
-                messages.append({"role": "user", "content": f"That was not valid ({exc}). Reply with the JSON object only."})
+                final += [{"role": "assistant", "content": reply.get("content") or ""},
+                          {"role": "user", "content": f"That was not valid ({exc}). Reply with the JSON object only."}]
             else:
                 notes.append(f"model's final answer was invalid twice ({exc}); deterministic summary used")
     return None
@@ -250,14 +249,16 @@ def investigate(db: Database, question: str, case_id: str | None = None,
 
     mode, answer, model = "rule_based", None, None
     llm_failed = False
-    if settings.llm_enabled:
-        mode, model = "llm", settings.llm_model
+    chat = ChatSession(deadline=s.started + settings.agent_budget_s, notes=notes)
+    if chat.enabled:
+        mode = "llm"
         try:
-            answer = _llm_investigation(s, question, context, notes)
+            answer = _llm_investigation(s, chat, question, context, notes)
         except LLMError as exc:
             notes.append(f"{exc.code}: {exc}")
             log.warning("LLM failed: %s", exc)
             llm_failed = True
+        model = chat.model
         if llm_failed or not s.run.evidence.all():
             # Never ship a half-finished model run (rate limits, outages): fall back to the
             # full deterministic investigation instead of accepting partial evidence.

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { API_BASE, ApiError, executeAction } from "@/lib/api";
+import { CheckIcon } from "@/components/Icons";
 import { formatMoney } from "@/lib/format";
 import type { ExecuteActionResponse, ProposedAction } from "@/lib/types";
 
@@ -45,15 +46,18 @@ export default function ActionCard({
       {sim && (
         <div className="mt-3 space-y-1.5">
           <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-faint">
-            Simulated impact (computed on the graph)
+            {executed ? "Impact on the live graph" : "Simulated impact (computed on the graph)"}
           </div>
-          <Bar label="capacity before" value={sim.capacity_before} max={Math.max(sim.capacity_before, 1)} tone="bg-faint" />
+          {/* One bar that drains from today's capacity to the post-freeze value on confirm. */}
           <Bar
-            label="after the action"
-            value={sim.capacity_after}
+            label={executed ? "capacity now" : "can move today"}
+            value={executed ? sim.capacity_after : sim.capacity_before}
             max={Math.max(sim.capacity_before, 1)}
-            tone="bg-ok"
+            tone={executed ? "bg-ok" : "bg-danger"}
           />
+          {!executed && (
+            <Bar label="if you confirm" value={sim.capacity_after} max={Math.max(sim.capacity_before, 1)} tone="bg-ok" />
+          )}
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pt-0.5 text-[11px]">
             {sim.residual_routes.length > 0 ? (
               <span className="text-accent">
@@ -74,8 +78,20 @@ export default function ActionCard({
       )}
 
       {executed && result && result.affected.length > 0 && (
-        <div className="mt-3 font-mono text-[11px] text-ok">
-          {action.type === "flag_accounts" ? "flagged" : "frozen"}: {result.affected.join(", ")}
+        <div className="freeze-banner mt-3 flex items-center gap-2 text-[12.5px] text-ink">
+          <span className="grid h-5 w-5 place-items-center rounded-full bg-ok text-surface">
+            <CheckIcon className="h-3 w-3" />
+          </span>
+          {action.type === "freeze_accounts" ? (
+            <span>
+              Route cut — <b className="font-mono">{result.affected.join(" + ")}</b> frozen
+              {sim?.verified_on === "fork" && <span className="text-muted"> · verified on a copy of the graph</span>}
+            </span>
+          ) : (
+            <span>
+              {action.type === "flag_accounts" ? "Flagged" : "Done"}: <b className="font-mono">{result.affected.join(", ")}</b>
+            </span>
+          )}
         </div>
       )}
 
@@ -137,12 +153,12 @@ export default function ActionCard({
 }
 
 function Bar({ label, value, max, tone }: { label: string; value: number; max: number; tone: string }) {
-  const pct = Math.max(2, Math.round((value / max) * 100));
+  const pct = Math.max(1.5, Math.round((value / max) * 100));
   return (
     <div className="flex items-center gap-2 text-[11px] text-muted">
       <span className="w-28 shrink-0">{label}</span>
       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-line">
-        <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
+        <div className={`h-full rounded-full transition-[width,background-color] duration-[1400ms] ease-out ${tone}`} style={{ width: `${pct}%` }} />
       </div>
       <span className="w-16 shrink-0 text-right font-mono tabular-nums">{formatMoney(value)}</span>
     </div>

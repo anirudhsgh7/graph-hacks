@@ -18,7 +18,7 @@ import {
 } from "@/lib/theme";
 
 interface ThemeContextValue {
-  /** The user's stored preference ("system" until they choose otherwise). */
+  /** The user's stored preference ("dark" until they choose otherwise). */
   theme: ThemePreference;
   /** The theme actually applied to the document. */
   resolvedTheme: ResolvedTheme;
@@ -27,8 +27,8 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: "system",
-  resolvedTheme: "light",
+  theme: "dark",
+  resolvedTheme: "dark",
   setTheme: () => {},
   toggleTheme: () => {},
 });
@@ -42,14 +42,14 @@ export function useTheme(): ThemeContextValue {
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 function readStoredPreference(): ThemePreference {
-  if (typeof window === "undefined") return "system";
+  if (typeof window === "undefined") return "dark";
   try {
     const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
     if (stored === "light" || stored === "dark") return stored;
   } catch {
     // localStorage unavailable (private mode, embedded webview) — fall through.
   }
-  return "system";
+  return "dark"; // default look: dark "investigation room" (keep in sync with THEME_INIT_SCRIPT)
 }
 
 export default function ThemeProvider({ children }: { children: ReactNode }) {

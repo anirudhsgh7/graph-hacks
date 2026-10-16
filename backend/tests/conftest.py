@@ -13,6 +13,8 @@ from pathlib import Path
 # whatever FALKORDB_GRAPH says in the shell or in backend/.env.
 os.environ["FALKORDB_GRAPH"] = os.environ.get("TEST_FALKORDB_GRAPH", "ftm_test")
 os.environ["LLM_API_KEY"] = ""          # tests choose LLM behaviour explicitly
+os.environ["LLM_FALLBACK_API_KEY"] = ""
+os.environ["GEMINI_API_KEY"] = ""
 os.environ.setdefault("BACKEND_API_TOKEN", "test-token")
 os.environ["INVESTIGATE_RATE_PER_MIN"] = "1000"   # rate limiting has its own test
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

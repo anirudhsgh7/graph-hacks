@@ -22,16 +22,26 @@ def llm_server():
 def llm(llm_server, fresh):
     """Point the agent at the fake server for one test."""
     from app.config import settings
-    saved = (settings.llm_api_key, settings.llm_base_url, settings.llm_model)
+    keys = ("llm_api_key", "llm_base_url", "llm_model", "llm_fallback_api_key", "llm_fallback_base_url",
+            "llm_fallback_model", "llm_reasoning_effort", "llm_max_wait_s")
+    saved = {k: getattr(settings, k) for k in keys}
     object.__setattr__(settings, "llm_api_key", "test-key")
     object.__setattr__(settings, "llm_base_url", f"http://127.0.0.1:{PORT}/v1")
     object.__setattr__(settings, "llm_model", "fake-model")
-    fake_llm.SCRIPT.clear()
-    fake_llm.REQUESTS.clear()
+    object.__setattr__(settings, "llm_fallback_api_key", None)   # tests opt in to a fallback
+    object.__setattr__(settings, "llm_reasoning_effort", None)
+    for lst in (fake_llm.SCRIPT, fake_llm.REQUESTS, fake_llm.SCRIPT_ALT, fake_llm.REQUESTS_ALT):
+        lst.clear()
     yield fake_llm
-    object.__setattr__(settings, "llm_api_key", saved[0])
-    object.__setattr__(settings, "llm_base_url", saved[1])
-    object.__setattr__(settings, "llm_model", saved[2])
+    for k, v in saved.items():
+        object.__setattr__(settings, k, v)
+
+
+def _with_fallback():
+    from app.config import settings
+    object.__setattr__(settings, "llm_fallback_api_key", "alt-key")
+    object.__setattr__(settings, "llm_fallback_base_url", f"http://127.0.0.1:{PORT}/alt/v1")
+    object.__setattr__(settings, "llm_fallback_model", "fake-fallback")
 
 
 RING_SCRIPT = [
@@ -67,7 +77,14 @@ def test_llm_happy_path_and_evidence_validation(llm):
     second = llm.REQUESTS[1]["messages"]
     assert second[2]["role"] == "assistant" and second[2]["tool_calls"][0]["id"] == "c1"
     assert {m["tool_call_id"] for m in second if m["role"] == "tool"} == {"c1", "c2"}
-    assert llm.REQUESTS[-1]["tool_choice"] == "none"
+    # the narration request is small: no tool schemas, no tool transcript, just the evidence ledger
+    final = llm.REQUESTS[-1]
+    assert "tools" not in final and all(m["role"] in ("system", "user") for m in final["messages"])
+    assert '"id":"ev-3"' in final["messages"][1]["content"]
+    # tool results reach the model as digests, not raw tool JSON
+    tool_msgs = [json.loads(m["content"]) for m in llm.REQUESTS[2]["messages"] if m["role"] == "tool"]
+    ring = next(m for m in tool_msgs if "groups" in m)
+    assert ring["groups"][0]["entry_points"] == ["A17", "A63", "A68"] and "exit_points" not in ring["groups"][0]
 
 
 def test_model_cannot_override_the_graph_verdict(llm):
@@ -129,3 +146,74 @@ def test_bad_tool_arguments_are_returned_to_the_model(llm):
     tool_msgs = [json.loads(m["content"]) for m in fake_llm.REQUESTS[1]["messages"] if m["role"] == "tool"]
     assert all("error" in t for t in tool_msgs)
     assert [t["ok"] for t in p["trace"]][:3] == [False, False, False]
+
+
+def test_rate_limited_primary_switches_to_fallback_provider(llm):
+    _with_fallback()
+    final = {"conclusion": "suspicious", "summary": "Ring found.",
+             "findings": [{"title": "Ring", "detail": "7", "confidence": 0.9, "evidence_refs": ["ev-3"]}]}
+    llm.SCRIPT.extend([RING_SCRIPT[0], {"status": 429}])                 # primary dies after one turn
+    llm.SCRIPT_ALT.extend(RING_SCRIPT[1:] + [reply_text("done"), reply_text(json.dumps(final))])
+    p = _investigate()
+    assert p["meta"]["mode"] == "llm" and p["meta"]["narrative_source"] == "llm"
+    assert p["meta"]["model"] == "fake-fallback"
+    assert any("switched to" in n and "fake-fallback" in n for n in p["meta"]["notes"])
+    # the fallback received the primary's history, tool-call ids intact
+    replayed = llm.REQUESTS_ALT[0]["messages"]
+    assert replayed[2]["tool_calls"][0]["id"] == "c1"
+    assert {m["tool_call_id"] for m in replayed if m["role"] == "tool"} == {"c1", "c2"}
+
+
+def test_short_retry_after_is_waited_out(llm):
+    from app.config import settings
+    object.__setattr__(settings, "llm_max_wait_s", 5)
+    final = {"conclusion": "suspicious", "summary": "Ring.",
+             "findings": [{"title": "Ring", "detail": "", "confidence": 0.9, "evidence_refs": ["ev-3"]}]}
+    llm.SCRIPT.extend([RING_SCRIPT[0],
+                       {"status": 429, "text": "Rate limit reached. Please try again in 0.6s."},  # Groq style
+                       *RING_SCRIPT[1:], reply_text("done"), reply_text(json.dumps(final))])
+    p = _investigate()
+    assert p["meta"]["mode"] == "llm" and p["meta"]["narrative_source"] == "llm"
+    assert any("waited 0.6s" in n for n in p["meta"]["notes"])
+
+
+def test_long_retry_after_is_not_waited(llm):
+    from app.config import settings
+    object.__setattr__(settings, "llm_max_wait_s", 5)
+    llm.SCRIPT.extend([{"status": 429, "headers": {"retry-after": "40"}}])
+    p = _investigate()
+    assert p["meta"]["mode"] == "rule_based" and p["meta"]["latency_ms"] < 20000
+    assert not any("waited" in n for n in p["meta"]["notes"])
+
+
+def test_missing_tool_call_ids_are_synthesised(llm):
+    calls = [{"type": "function", "function": {"name": "account_profile", "arguments": {"account_id": "M8"}}}]
+    llm.SCRIPT.extend([{"role": "assistant", "content": None, "tool_calls": calls}, reply_text("done"),
+                       reply_text(json.dumps({"conclusion": "no_evidence", "summary": "x", "findings": []}))])
+    _investigate("Is M8 laundering money?", "case-003")
+    sent = llm.REQUESTS[1]["messages"]
+    call_id = sent[2]["tool_calls"][0]["id"]
+    assert call_id.startswith("call_") and sent[2]["tool_calls"][0]["function"]["arguments"] == '{"account_id": "M8"}'
+    assert sent[3]["tool_call_id"] == call_id
+
+
+def test_reasoning_effort_dropped_when_rejected(llm):
+    from app.config import settings
+    object.__setattr__(settings, "llm_reasoning_effort", "low")
+    llm.SCRIPT.extend([{"status": 400, "text": "unknown parameter: reasoning_effort"}, reply_text("A17 is fine.")])
+    _investigate()
+    assert llm.REQUESTS[0]["reasoning_effort"] == "low" and "reasoning_effort" not in llm.REQUESTS[1]
+
+
+def test_token_budget_of_a_full_investigation(llm):
+    """Guards the free-tier fix: a complete 5-request ring investigation stays small.
+    (~3.5 characters per token for this JSON; Groq's free tier allows 8K tokens/min.)"""
+    final = {"conclusion": "suspicious", "summary": "Ring.",
+             "findings": [{"title": "Ring", "detail": "", "confidence": 0.9, "evidence_refs": ["ev-3"]}]}
+    llm.SCRIPT.extend([RING_SCRIPT[0], RING_SCRIPT[1],
+                       reply_tools(tool_call("t", "money_trail", {"src": "A17", "dst": "H3"}), *RING_SCRIPT[2]["tool_calls"]),
+                       reply_text(json.dumps(final))])      # the last turn carries the answer
+    p = _investigate()
+    assert p["meta"]["narrative_source"] == "llm" and len(llm.REQUESTS) == 4
+    chars = sum(len(json.dumps({"m": r["messages"], "t": r.get("tools")}, separators=(",", ":"))) for r in llm.REQUESTS)
+    assert chars / 3.5 < 8000, f"~{chars / 3.5:.0f} input tokens"

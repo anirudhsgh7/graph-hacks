@@ -704,7 +704,7 @@ def plan_minimum_freeze(run: Run, entry_ids: list[str], hub_ids: list[str], max_
 # ---------------------------------------------------------------------------
 # registry (descriptions double as the model's tool documentation)
 # ---------------------------------------------------------------------------
-_ID = {"type": "string", "description": "Account id, e.g. A17"}
+_ID = {"type": "string"}
 _IDS = {"type": "array", "items": {"type": "string"}, "minItems": 1}
 
 
@@ -721,55 +721,48 @@ TOOLS: dict[str, ToolSpec] = {t.name: t for t in [
              "Find accounts by id prefix or owner name.",
              {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}),
     ToolSpec("account_profile", account_profile,
-             "Owner, age, status, legacy anomaly score and rank, in/out totals, how many senders paid "
-             "only once, and how fast money leaves the account.",
+             "Owner, age, legacy anomaly rank, senders/recipients, how fast money leaves.",
              {"type": "object", "properties": {"account_id": _ID}, "required": ["account_id"]}),
     ToolSpec("shared_infrastructure", shared_infrastructure,
-             "Accounts that log in from the same devices or IP addresses as this account.",
+             "Accounts sharing a device or IP with this account.",
              {"type": "object", "properties": {"account_id": _ID}, "required": ["account_id"]}),
     ToolSpec("detect_ring", detect_ring,
-             "Groups accounts tied together by shared devices/IPs (graph WCC) and measures whether the "
-             "group behaves like a mule ring (pass-through, forwarding speed). Returns entry points and "
-             "cash-out candidates. Give it the seed account plus any linked accounts.",
+             "Group accounts linked by shared devices/IPs (WCC); verdict mule_ring or not, entry points, "
+             "cash-out candidates. Pass the seed plus linked accounts.",
              {"type": "object", "properties": {"account_ids": _IDS}, "required": ["account_ids"]}),
     ToolSpec("money_trail", money_trail,
-             "Shortest money routes from src to dst (graph SPpaths), each checked for a time-ordered "
-             "sequence of real transfers. quality: strong | weak | structural.",
+             "Shortest money routes src->dst (SPpaths), checked against real transfers in time order.",
              {"type": "object", "properties": {"src": _ID, "dst": _ID,
                                                "max_len": {"type": "integer", "minimum": 1, "maximum": 8},
                                                "path_count": {"type": "integer", "minimum": 1, "maximum": 8}},
               "required": ["src", "dst"]}),
     ToolSpec("follow_funds", follow_funds,
-             "Follow one payment forward hop by hop: each next transfer must leave within the window "
-             "and keep most of the amount. Starts from the account's largest outgoing transfer unless "
-             "transfer_id is given. Best for complaints about a specific loss.",
+             "Follow one payment forward hop by hop (starts at the largest outgoing transfer). "
+             "For complaints about a specific loss.",
              {"type": "object", "properties": {"account_id": _ID, "transfer_id": {"type": "string"},
                                                "window_minutes": {"type": "integer"},
                                                "min_retained": {"type": "number"},
                                                "max_hops": {"type": "integer"}},
               "required": ["account_id"]}),
     ToolSpec("rank_hubs", rank_hubs,
-             "Top accounts by PageRank over transfers (collectors, sinks, busy merchants).",
+             "Top accounts by PageRank over transfers.",
              {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 25}}}),
     ToolSpec("layering_scan", layering_scan,
-             "Find pass-through patterns: money arriving at these accounts and leaving again within the "
-             "window for a similar amount.",
+             "Money entering and leaving these accounts again within the window for a similar amount.",
              {"type": "object", "properties": {"account_ids": _IDS, "window_minutes": {"type": "integer"},
                                                "fee_tolerance": {"type": "number"}},
               "required": ["account_ids"]}),
     ToolSpec("laundering_capacity", laundering_capacity,
-             "Maximum money that can flow from entry accounts to hub accounts (max-flow), with the "
-             "bottleneck transfers. Frozen accounts are excluded.",
+             "Max-flow from entry accounts to hubs, with bottlenecks. Excludes frozen accounts.",
              {"type": "object", "properties": {"entry_ids": _IDS, "hub_ids": _IDS},
               "required": ["entry_ids", "hub_ids"]}),
     ToolSpec("simulate_freeze", simulate_freeze,
-             "What-if: copy the graph, remove the given accounts, re-run capacity and routes. "
-             "Shows what would still get through. Changes nothing.",
+             "What-if on a graph copy: remove accounts, re-run capacity and routes. Changes nothing.",
              {"type": "object", "properties": {"freeze_ids": _IDS, "entry_ids": _IDS, "hub_ids": _IDS},
               "required": ["freeze_ids", "entry_ids", "hub_ids"]}),
     ToolSpec("plan_minimum_freeze", plan_minimum_freeze,
-             "Smallest, least-collateral set of accounts to freeze that cuts EVERY route from the entry "
-             "accounts to the hubs (minimum cut), proven on a copy of the graph, compared with naive plans.",
+             "Fewest accounts to freeze that cut EVERY route entries->hubs (minimum cut), proven on a "
+             "graph copy and compared with naive plans.",
              {"type": "object", "properties": {"entry_ids": _IDS, "hub_ids": _IDS,
                                                "max_accounts": {"type": "integer"}},
               "required": ["entry_ids", "hub_ids"]}),

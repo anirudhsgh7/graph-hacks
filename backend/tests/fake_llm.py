@@ -2,6 +2,8 @@
 
 Each test sets SCRIPT to a list of replies; the server returns them in order and
 records every request body in REQUESTS so tests can assert what the agent sent.
+A second provider lives under /alt/v1 with its own SCRIPT_ALT / REQUESTS_ALT.
+A scripted item may be {"status": 429, "headers": {...}, "text": "..."} to fail.
 """
 from __future__ import annotations
 
@@ -16,6 +18,8 @@ from fastapi.responses import JSONResponse
 app = FastAPI()
 SCRIPT: list[dict] = []
 REQUESTS: list[dict] = []
+SCRIPT_ALT: list[dict] = []
+REQUESTS_ALT: list[dict] = []
 
 
 def tool_call(call_id: str, name: str, args: dict) -> dict:
@@ -30,16 +34,25 @@ def reply_text(text: str) -> dict:
     return {"role": "assistant", "content": text}
 
 
+def _answer(script: list[dict], log: list[dict], body: dict):
+    log.append(body)
+    if not script:
+        return JSONResponse({"error": "script exhausted"}, status_code=500)
+    item = script.pop(0)
+    if "status" in item:
+        return JSONResponse({"error": item.get("text", "scripted failure")}, status_code=item["status"],
+                            headers=item.get("headers"))
+    return {"choices": [{"index": 0, "message": item, "finish_reason": "stop"}]}
+
+
 @app.post("/v1/chat/completions")
 async def completions(request: Request):
-    body = await request.json()
-    REQUESTS.append(body)
-    if not SCRIPT:
-        return JSONResponse({"error": "script exhausted"}, status_code=500)
-    item = SCRIPT.pop(0)
-    if "status" in item:
-        return JSONResponse({"error": "scripted failure"}, status_code=item["status"])
-    return {"choices": [{"index": 0, "message": item, "finish_reason": "stop"}]}
+    return _answer(SCRIPT, REQUESTS, await request.json())
+
+
+@app.post("/alt/v1/chat/completions")
+async def completions_alt(request: Request):
+    return _answer(SCRIPT_ALT, REQUESTS_ALT, await request.json())
 
 
 def serve(port: int) -> uvicorn.Server:

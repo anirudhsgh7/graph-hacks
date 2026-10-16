@@ -137,3 +137,4 @@ An LLM outage is **not** an error: the investigation completes in rule-based mod
 ## Changelog
 
 - v1 (Oct 15): initial contract.
+- v1.2 (Oct 16, additive): `meta.model` is the model that actually answered (may be the fallback provider's); `meta.notes` can include provider waits ("groq rate-limited; waited 6.0s as it asked") and switches ("...; switched to gemini (gemini-flash-lite-latest)"). `health.llm_model` lists the chain, e.g. `openai/gpt-oss-120b -> gemini-flash-lite-latest`.

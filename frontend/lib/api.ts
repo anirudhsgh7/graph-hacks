@@ -88,6 +88,97 @@ export async function investigate(question: string, caseId: string): Promise<Inv
   });
 }
 
+/** One agent step as it happens (POST /api/investigate/stream "step" events). */
+export interface StreamStep {
+  step: number;
+  tool: string;
+  status: "started" | "done";
+  ok?: boolean;
+  headline?: string;
+  duration_ms?: number;
+  evidence_ids?: string[];
+}
+
+/**
+ * Investigate while reporting each tool step as it runs.
+ * Live: reads the backend's Server-Sent Events. Mock: replays the recorded trace at a
+ * readable pace. Falls back to the plain request if streaming is not available.
+ */
+export async function investigateStream(
+  question: string,
+  caseId: string,
+  onStep: (s: StreamStep) => void,
+): Promise<InvestigationResponse> {
+  if (IS_MOCK) {
+    const resp = pickInvestigation(caseId, question);
+    await sleep(350);
+    for (const t of resp.trace) {
+      onStep({ step: t.step, tool: t.tool, status: "started" });
+      await sleep(320 + Math.min(260, t.duration_ms));
+      onStep({ step: t.step, tool: t.tool, status: "done", ok: t.ok, headline: t.headline,
+               duration_ms: t.duration_ms, evidence_ids: t.evidence_ids });
+    }
+    await sleep(250);
+    return resp;
+  }
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/investigate/stream`, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify({ question, case_id: caseId }),
+    });
+  } catch {
+    return investigate(question, caseId);
+  }
+  if (!res.ok || !res.body) {
+    if (res.status === 404 || !res.body) return investigate(question, caseId);
+    let body: ApiErrorBody | null = null;
+    try {
+      body = (await res.json()) as ApiErrorBody;
+    } catch {
+      // non-JSON error
+    }
+    throw new ApiError(body?.error?.code ?? `HTTP_${res.status}`, body?.error?.message ?? `Request failed (${res.status}).`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  // Display pacing: a fast run (rule-based ≈ 1 s) would flash past, so steps are shown at
+  // least STEP_GAP_MS apart. Only the timeline is paced; meta.latency_ms stays the real figure.
+  const STEP_GAP_MS = 220;
+  let lastEmit = 0;
+  const paced = async (s: StreamStep) => {
+    const wait = lastEmit + STEP_GAP_MS - Date.now();
+    if (wait > 0) await sleep(wait);
+    lastEmit = Date.now();
+    onStep(s);
+  };
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let cut: number;
+    while ((cut = buffer.indexOf("\n\n")) >= 0) {
+      const block = buffer.slice(0, cut);
+      buffer = buffer.slice(cut + 2);
+      let event = "message";
+      const data: string[] = [];
+      for (const line of block.split("\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        else if (line.startsWith("data:")) data.push(line.slice(5).trim());
+      }
+      if (!data.length) continue; // keep-alive comment
+      const payload = JSON.parse(data.join("\n"));
+      if (event === "step") await paced(payload as StreamStep);
+      else if (event === "done") return payload as InvestigationResponse;
+      else if (event === "error") throw new ApiError(payload.code ?? "INTERNAL", payload.message ?? "Investigation failed.");
+    }
+  }
+  throw new ApiError("STREAM_ENDED", "The investigation stream ended before an answer arrived. Retry.");
+}
+
 export interface ExecuteMeta {
   type: string;
   account_ids: string[];

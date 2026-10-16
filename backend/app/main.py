@@ -27,6 +27,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from agent import actions as actions_mod
 from agent import graphview
 from agent.evidence import EvidenceLog, fingerprint
+from agent.llm import providers as llm_providers
 from agent.loop import InvestigationError, investigate
 from agent.tools import iso
 from app import report
@@ -187,7 +188,7 @@ def health() -> dict:
     seeded = bool(counts and counts["accounts"])
     return {"status": "ok" if ok and seeded else "degraded", "db": "ok" if ok else "unreachable",
             "llm": "configured" if settings.llm_enabled else "not_configured",
-            "llm_model": settings.llm_model if settings.llm_enabled else None,
+            "llm_model": " -> ".join(p.model for p in llm_providers()) or None,
             "graph": counts, "capabilities": caps, "version": VERSION}
 
 

@@ -1,20 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, fetchCase, graphSnapshot, investigate, IS_MOCK } from "@/lib/api";
+import { ApiError, fetchCase, graphSnapshot, investigateStream, IS_MOCK, type StreamStep } from "@/lib/api";
+import { revealFrames, stepsFromTrace, type LiveStep } from "@/lib/agentRun";
 import { caseMeta } from "@/lib/mocks";
-import type {
-  CaseSummary,
-  Conclusion,
-  Evidence,
-  ExecuteActionResponse,
-  InvestigationResponse,
-} from "@/lib/types";
-import GraphCanvas from "@/components/GraphCanvas";
-import AgentTrace from "@/components/AgentTrace";
+import type { CaseSummary, Conclusion, Evidence, ExecuteActionResponse, InvestigationResponse } from "@/lib/types";
+import NetworkPanel from "@/components/NetworkPanel";
 import FindingsPanel from "@/components/FindingsPanel";
 import EvidenceDetail from "@/components/EvidenceDetail";
 import ActionCard from "@/components/ActionCard";
+import { LiveTimeline, ProofStrip } from "@/components/AgentRun";
+import VerdictHero, { type FreezeOutcome } from "@/components/VerdictHero";
 
 interface InvestigationItem {
   id: string;
@@ -37,9 +33,9 @@ const CONCLUSION_LABEL: Record<Conclusion, string> = {
   inconclusive: "inconclusive",
 };
 
-function LegendDot({ className }: { className: string }) {
-  return <span className={`h-1.5 w-1.5 rounded-full ${className}`} />;
-}
+const REPLAY_STEP_MS = 520;
+const reducedMotion = () =>
+  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export default function CaseView({ caseId }: { caseId: string }) {
   const mockMeta = useMemo(() => caseMeta(caseId), [caseId]);
@@ -48,10 +44,20 @@ export default function CaseView({ caseId }: { caseId: string }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pendingQuestion, setPendingQuestion] = useState("");
+  const [liveSteps, setLiveSteps] = useState<LiveStep[]>([]);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [error, setError] = useState<ApiError | null>(null);
+  // what the analyst is looking at (see `emphasis` for the priority order)
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
   const [selectedEvidenceId, setSelectedEvidenceId] = useState<string | null>(null);
+  const [selectedStep, setSelectedStep] = useState<number | null>(null);
+  const [stickyAccount, setStickyAccount] = useState<string | null>(null);
+  const [hoverFindingId, setHoverFindingId] = useState<string | null>(null);
+  const [hoverAccount, setHoverAccount] = useState<string | null>(null);
+  // graph assembly replay: frame k shows the nodes found by steps 1..k+1
+  const [replay, setReplay] = useState<{ itemId: string; frame: number; frames: string[][] } | null>(null);
+  const [freezes, setFreezes] = useState<Record<string, FreezeOutcome>>({});
   const startedAt = useRef<number | null>(null);
 
   // Live mode: the briefing (title, alert, suggested questions) comes from the
@@ -74,6 +80,35 @@ export default function CaseView({ caseId }: { caseId: string }) {
 
   const active = items.find((i) => i.id === activeId) ?? items[0] ?? null;
   const activeEvidence = useMemo(() => active?.response.evidence ?? [], [active]);
+  // Cash-out hubs named by the capacity / freeze-plan evidence (still known after a freeze).
+  const hubIds = useMemo(() => {
+    const hubs = new Set<string>();
+    for (const e of activeEvidence) {
+      const h = e.result_excerpt["hub_ids"];
+      if (Array.isArray(h)) h.forEach((id) => typeof id === "string" && hubs.add(id));
+    }
+    return [...hubs];
+  }, [activeEvidence]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedFindingId(null);
+    setSelectedEvidenceId(null);
+    setSelectedStep(null);
+    setStickyAccount(null);
+    setHoverFindingId(null);
+    setHoverAccount(null);
+  }, []);
+
+  const startReplay = useCallback(
+    (item: InvestigationItem) => {
+      if (reducedMotion() || item.response.trace.length === 0) {
+        setReplay(null);
+        return;
+      }
+      setReplay({ itemId: item.id, frame: 0, frames: revealFrames(item.response, briefing.seed_accounts) });
+    },
+    [briefing.seed_accounts],
+  );
 
   const ask = useCallback(
     async (question: string) => {
@@ -82,10 +117,20 @@ export default function CaseView({ caseId }: { caseId: string }) {
       setInput("");
       setError(null);
       setLoading(true);
+      setPendingQuestion(q);
+      setLiveSteps([]);
       startedAt.current = Date.now();
       setElapsedMs(0);
+      const onStep = (s: StreamStep) =>
+        setLiveSteps((prev) => {
+          const i = prev.findIndex((p) => p.step === s.step);
+          if (i < 0) return [...prev, s];
+          const next = prev.slice();
+          next[i] = { ...prev[i], ...s };
+          return next;
+        });
       try {
-        const response = await investigate(q, caseId);
+        const response = await investigateStream(q, caseId, onStep);
         const item: InvestigationItem = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           question: q,
@@ -94,20 +139,18 @@ export default function CaseView({ caseId }: { caseId: string }) {
         };
         setItems((prev) => [item, ...prev]);
         setActiveId(item.id);
-        setSelectedFindingId(null);
-        setSelectedEvidenceId(null);
+        clearSelection();
+        startReplay(item);
       } catch (e) {
         setError(
-          e instanceof ApiError
-            ? e
-            : new ApiError("UNKNOWN", "Something went wrong while investigating. Try again."),
+          e instanceof ApiError ? e : new ApiError("UNKNOWN", "Something went wrong while investigating. Try again."),
         );
       } finally {
         setLoading(false);
         startedAt.current = null;
       }
     },
-    [caseId, loading],
+    [caseId, loading, clearSelection, startReplay],
   );
 
   // Elapsed timer while the agent works.
@@ -115,49 +158,72 @@ export default function CaseView({ caseId }: { caseId: string }) {
     if (!loading) return;
     const t = setInterval(() => {
       if (startedAt.current) setElapsedMs(Date.now() - startedAt.current);
-    }, 250);
+    }, 100);
     return () => clearInterval(t);
   }, [loading]);
 
-  // In mock mode, auto-run the first suggested question — the deployed shell demos itself.
+  // Advance the assembly replay.
+  useEffect(() => {
+    if (!replay) return;
+    const t = setTimeout(
+      () => setReplay((r) => (r && r.frame + 1 < r.frames.length ? { ...r, frame: r.frame + 1 } : null)),
+      REPLAY_STEP_MS,
+    );
+    return () => clearTimeout(t);
+  }, [replay]);
+
+  // Auto-run the first suggested question in mock mode (the deployed shell demos itself)
+  // and whenever the URL asks for it (?run=1, used by the landing page's call to action).
   const autoRan = useRef(false);
   useEffect(() => {
-    if (!autoRan.current && IS_MOCK && items.length === 0) {
+    if (autoRan.current || items.length > 0) return;
+    const wanted = IS_MOCK || new URLSearchParams(window.location.search).has("run");
+    if (!wanted) return;
+    // deferred (not setState during the effect); the guard is set when it actually runs,
+    // so React's dev-mode double effect cannot cancel it
+    const t = setTimeout(() => {
+      if (autoRan.current) return;
       autoRan.current = true;
       void ask(briefing.suggested_questions[0]);
-    }
+    }, 0);
+    return () => clearTimeout(t);
   }, [ask, items.length, briefing.suggested_questions]);
 
-  const selectedEvidence: Evidence | null =
-    activeEvidence.find((e) => e.id === selectedEvidenceId) ?? null;
+  const replaying = !!replay && !!active && replay.itemId === active.id;
+  const reveal = replaying ? replay.frames[replay.frame] : null;
+  const replayStep = replaying ? (active.response.trace[replay.frame]?.step ?? null) : null;
 
+  const selectedEvidence: Evidence | null = activeEvidence.find((e) => e.id === selectedEvidenceId) ?? null;
+
+  // What the graph highlights, in priority order: clicked evidence > clicked step >
+  // clicked account > selected finding > hovered finding > hovered account. Clicks fly the
+  // camera there; hovers only preview.
   const emphasis = useMemo(() => {
     const nodeIds = new Set<string>();
     const edgeIds = new Set<string>();
-    if (selectedEvidence) {
-      selectedEvidence.node_ids.forEach((id) => nodeIds.add(id));
-      selectedEvidence.edge_ids.forEach((id) => edgeIds.add(id));
-    } else if (active && selectedFindingId) {
-      const finding = active.response.findings.find((f) => f.id === selectedFindingId);
-      for (const ref of finding?.evidence_refs ?? []) {
+    const addEvidence = (ids: string[]) => {
+      for (const ref of ids) {
         const ev = activeEvidence.find((e) => e.id === ref);
         ev?.node_ids.forEach((id) => nodeIds.add(id));
         ev?.edge_ids.forEach((id) => edgeIds.add(id));
       }
+    };
+    let fly = true;
+    if (!active || replaying) return { nodeIds: [], edgeIds: [], fly: false };
+    const findingRefs = (id: string | null) => active.response.findings.find((f) => f.id === id)?.evidence_refs ?? [];
+    if (selectedEvidence) addEvidence([selectedEvidence.id]);
+    else if (selectedStep != null) addEvidence(active.response.trace.find((t) => t.step === selectedStep)?.evidence_ids ?? []);
+    else if (stickyAccount) nodeIds.add(stickyAccount);
+    else if (selectedFindingId) addEvidence(findingRefs(selectedFindingId));
+    else if (hoverFindingId) {
+      addEvidence(findingRefs(hoverFindingId));
+      fly = false;
+    } else if (hoverAccount) {
+      nodeIds.add(hoverAccount);
+      fly = false;
     }
-    return { nodeIds: Array.from(nodeIds), edgeIds: Array.from(edgeIds) };
-  }, [active, activeEvidence, selectedEvidence, selectedFindingId]);
-
-  const metaSegments = useMemo(() => {
-    const segments: string[] = [];
-    const m = active?.response.meta;
-    if (!m) return segments;
-    segments.push(m.model ?? m.mode.replace("_", "-"));
-    segments.push(`${m.tool_iterations} tool calls`);
-    segments.push(`${(m.latency_ms / 1000).toFixed(1)}s`);
-    if (m.frozen_accounts.length > 0) segments.push(`${m.frozen_accounts.length} frozen`);
-    return segments;
-  }, [active]);
+    return { nodeIds: Array.from(nodeIds), edgeIds: Array.from(edgeIds), fly };
+  }, [active, activeEvidence, replaying, selectedEvidence, selectedStep, stickyAccount, selectedFindingId, hoverFindingId, hoverAccount]);
 
   // After an action executes, mirror the backend: apply the returned graph_delta
   // immediately, then refresh the canvas from the snapshot endpoint (current
@@ -175,9 +241,7 @@ export default function CaseView({ caseId }: { caseId: string }) {
                 ...item.response,
                 graph: {
                   ...item.response.graph,
-                  nodes: item.response.graph.nodes.map((n) =>
-                    patch.has(n.id) ? { ...n, status: patch.get(n.id) } : n,
-                  ),
+                  nodes: item.response.graph.nodes.map((n) => (patch.has(n.id) ? { ...n, status: patch.get(n.id) } : n)),
                 },
               },
             },
@@ -189,24 +253,29 @@ export default function CaseView({ caseId }: { caseId: string }) {
     async (result: ExecuteActionResponse) => {
       const itemId = active?.id;
       if (!itemId) return;
+      if (result.type === "freeze_accounts" && result.affected.length) {
+        const sim = active.response.proposed_actions.find((a) => a.id === result.action_id)?.simulation;
+        setFreezes((prev) => ({
+          ...prev,
+          [itemId]: {
+            accounts: result.affected,
+            before: sim?.capacity_before ?? null,
+            after: sim?.capacity_after ?? null,
+            verified: sim?.verified_on === "fork",
+          },
+        }));
+        clearSelection();
+      }
       applyGraphDelta(itemId, result.graph_delta);
       try {
         const graph = await graphSnapshot(caseId);
-        setItems((prev) =>
-          prev.map((item) =>
-            item.id === itemId ? { ...item, response: { ...item.response, graph } } : item,
-          ),
-        );
+        setItems((prev) => prev.map((item) => (item.id === itemId ? { ...item, response: { ...item.response, graph } } : item)));
       } catch {
         // keep the optimistic patch if the snapshot refresh fails
       }
     },
-    [active, applyGraphDelta, caseId],
+    [active, applyGraphDelta, caseId, clearSelection],
   );
-
-  const noEvidence = active
-    ? active.response.conclusion === "no_evidence" || active.response.status === "no_evidence"
-    : false;
 
   return (
     <main className="app-container flex-1 space-y-6 py-6 lg:py-8">
@@ -246,52 +315,31 @@ export default function CaseView({ caseId }: { caseId: string }) {
               onChange={(e) => setInput(e.target.value)}
               disabled={loading}
             />
-            <button
-              className="btn btn-primary h-11 shrink-0 px-5"
-              type="submit"
-              disabled={loading || input.trim().length === 0}
-            >
-              {loading && (
-                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              )}
+            <button className="btn btn-primary h-11 shrink-0 px-5" type="submit" disabled={loading || input.trim().length === 0}>
+              {loading && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />}
               {loading ? "Investigating…" : "Investigate"}
             </button>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-            <span className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-faint">
-              Suggested
-            </span>
-            {briefing.suggested_questions.map((q) => (
-              <button
-                key={q}
-                type="button"
-                className="text-[12.5px] text-muted transition-colors hover:text-accent disabled:opacity-50"
-                disabled={loading}
-                onClick={() => void ask(q)}
-              >
-                {q}
-              </button>
-            ))}
+          <div className="mt-3">
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-faint">Try asking</span>
+            <div className="-mx-1 mt-1.5 flex flex-wrap gap-2 px-1">
+              {briefing.suggested_questions.map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  className="chip h-auto min-h-8 px-3 py-1.5 text-left text-[12.5px] leading-snug text-muted transition-colors hover:border-accent-line hover:text-ink disabled:opacity-50"
+                  disabled={loading}
+                  onClick={() => void ask(q)}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
           </div>
         </form>
       </section>
 
-      {loading && (
-        <div className="rounded-lg border border-accent-line bg-accent-soft px-4 py-3.5">
-          <div className="flex items-center gap-3">
-            <span className="h-2.5 w-2.5 animate-ping rounded-full bg-accent-fill" />
-            <div className="text-sm text-ink">
-              Agent investigating — running graph tools…{" "}
-              <span className="font-mono text-xs tabular-nums text-accent">{Math.floor(elapsedMs / 1000)}s</span>
-            </div>
-          </div>
-          <div className="mt-3 space-y-2">
-            <div className="skeleton h-3 w-2/3" />
-            <div className="skeleton h-3 w-1/2" />
-            <div className="skeleton h-3 w-3/5" />
-          </div>
-        </div>
-      )}
+      {loading && <LiveTimeline steps={liveSteps} elapsedMs={elapsedMs} question={pendingQuestion} />}
 
       {error && (
         <div className="rounded-lg border border-danger-line bg-danger-soft px-4 py-3.5">
@@ -319,79 +367,59 @@ export default function CaseView({ caseId }: { caseId: string }) {
         </div>
       )}
 
-      {active && (
+      {active && !loading && (
         <>
+          {/* The answer first: verdict, the numbers that matter, the conclusion */}
+          <VerdictHero
+            response={active.response}
+            freeze={freezes[active.id] ?? null}
+            onFocusAccount={(id, sticky) => {
+              if (sticky) {
+                setStickyAccount((cur) => (cur === id ? null : id));
+                setSelectedEvidenceId(null);
+                setSelectedStep(null);
+              } else setHoverAccount(id);
+            }}
+            onSelectEvidence={(id) => {
+              setSelectedStep(null);
+              setSelectedEvidenceId((cur) => (cur === id ? null : id));
+            }}
+          />
+
           {/* Workspace: network (sticky on desktop) + investigation report */}
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
             <section className="xl:col-span-7">
               <div className="xl:sticky xl:top-[73px]">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="eyebrow">Transaction network</h2>
-                  <div className="flex items-center gap-3 text-[11px] text-muted">
-                    <span className="inline-flex items-center gap-1.5">
-                      <LegendDot className="bg-graph-ring" /> ring
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <LegendDot className="bg-graph-trail" /> trail
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <LegendDot className="bg-graph-cut" /> cut
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <LegendDot className="bg-graph-frozen" /> frozen
-                    </span>
-                  </div>
-                </div>
-                <GraphCanvas graph={active.response.graph} emphasis={emphasis} />
+                <NetworkPanel
+                  graph={active.response.graph}
+                  emphasis={emphasis}
+                  seeds={briefing.seed_accounts}
+                  hubs={hubIds}
+                  reveal={reveal}
+                  suspicious={active.response.conclusion === "suspicious"}
+                />
               </div>
             </section>
 
             {/* One continuous report surface, sections separated by hairlines */}
             <section className="xl:col-span-5">
               <div className="card divide-y divide-line p-0">
-                {/* Conclusion first — the headline of the investigation */}
-                <div className="px-4 py-4">
-                  <p className="text-[12px] leading-snug text-muted">“{active.question}”</p>
-                  <h2 className="eyebrow mt-3">
-                    Agent conclusion
-                    {noEvidence && <span className="text-info"> — no laundering evidence found</span>}
-                  </h2>
-                  <p className="mt-2 text-[15px] leading-relaxed text-ink">{active.response.summary}</p>
-                  {noEvidence && (
-                    <p className="mt-2 text-[11px] leading-relaxed text-faint">
-                      A defensible no-evidence result — the honest-false-alarm path; the trace below lists
-                      every check the agent ran.
-                    </p>
-                  )}
-                  {active.response.meta.notes.length > 0 && (
-                    <ul className="mt-2 space-y-0.5">
-                      {active.response.meta.notes.map((n) => (
-                        <li key={n} className="text-[11px] leading-relaxed text-faint">
-                          {n}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {metaSegments.length > 0 && (
-                    <div className="mt-3 font-mono text-[11px] text-faint tabular-nums">
-                      {metaSegments.join("  ·  ")}
-                    </div>
-                  )}
-                </div>
-
                 {active.response.findings.length > 0 && (
                   <div className="px-4 py-4">
-                    <h2 className="eyebrow">Findings</h2>
+                    <h2 className="eyebrow">Findings · hover to preview on the graph</h2>
                     <FindingsPanel
                       findings={active.response.findings}
                       evidence={activeEvidence}
                       selectedFindingId={selectedFindingId}
                       selectedEvidenceId={selectedEvidenceId}
                       onSelectFinding={(id) => {
-                        setSelectedFindingId(id);
+                        setSelectedFindingId((cur) => (cur === id ? null : id));
                         setSelectedEvidenceId(null);
+                        setSelectedStep(null);
+                        setStickyAccount(null);
                       }}
                       onSelectEvidence={(id) => setSelectedEvidenceId(id)}
+                      onHoverFinding={setHoverFindingId}
                     />
                   </div>
                 )}
@@ -422,10 +450,22 @@ export default function CaseView({ caseId }: { caseId: string }) {
             </section>
           </div>
 
-          {/* Technical trace */}
+          {/* Proof strip: every graph step, its algorithm, click to light it up */}
           <section className="border-t border-line pt-5">
-            <h2 className="eyebrow">Agent trace</h2>
-            <AgentTrace trace={active.response.trace} />
+            <ProofStrip
+              trace={active.response.trace}
+              activeStep={replayStep ?? selectedStep}
+              playing={replaying}
+              onSelectStep={(step) => {
+                setSelectedStep(step);
+                setSelectedEvidenceId(null);
+                setStickyAccount(null);
+              }}
+              onReplay={() => {
+                clearSelection();
+                startReplay(active);
+              }}
+            />
           </section>
 
           {/* Investigation feed */}
@@ -439,8 +479,8 @@ export default function CaseView({ caseId }: { caseId: string }) {
                       type="button"
                       onClick={() => {
                         setActiveId(item.id);
-                        setSelectedFindingId(null);
-                        setSelectedEvidenceId(null);
+                        clearSelection();
+                        setReplay(null);
                       }}
                       className={`w-full py-2.5 text-left text-sm transition hover:text-accent ${
                         item.id === active.id ? "text-accent" : "text-ink"
@@ -449,7 +489,7 @@ export default function CaseView({ caseId }: { caseId: string }) {
                       <span className="font-mono text-xs tabular-nums text-faint">
                         {new Date(item.askedAt).toLocaleTimeString()}
                       </span>{" "}
-                      {item.question}
+                      {item.question} <span className="text-faint">· {stepsFromTrace(item.response.trace).length} steps</span>
                     </button>
                   </li>
                 ))}

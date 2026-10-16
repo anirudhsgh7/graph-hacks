@@ -73,6 +73,17 @@
   --graph-emphasis: #cf7f08;
   --graph-cut: #7c3aed;
   --graph-flow: #0284c7;
+  /* 3D network (components/Graph3D.tsx) */
+  --graph-hub: #1e293b;          /* cash-out destination */
+  --graph-quiet: #a3afc2;        /* accounts with no role in the finding */
+  --graph-checked: #3b82f6;      /* a route the agent checked that turned out benign */
+  --graph-floor: #c9d2df;        /* grid of the devices & IPs floor */
+  --graph-label-bg: rgba(255, 255, 255, 0.86);
+  /* "investigation room" atmosphere: stage behind the 3D canvas, verdict glows */
+  --stage-glow: rgb(59 130 246 / 0.07);
+  --stage-glow-2: rgb(225 29 72 / 0.04);
+  --hero-glow-suspicious: rgb(225 29 72 / 0.09);
+  --hero-glow-clear: rgb(11 106 156 / 0.08);
 }
 
 :root.dark {
@@ -128,6 +139,15 @@
   --graph-emphasis: #f5c356;
   --graph-cut: #a78bfa;
   --graph-flow: #38bdf8;
+  --graph-hub: #e8edf5;
+  --graph-quiet: #4d5b72;
+  --graph-checked: #60a5fa;
+  --graph-floor: #263247;
+  --graph-label-bg: rgba(10, 15, 24, 0.82);
+  --stage-glow: rgb(76 141 250 / 0.16);
+  --stage-glow-2: rgb(244 63 94 / 0.09);
+  --hero-glow-suspicious: rgb(244 63 94 / 0.16);
+  --hero-glow-clear: rgb(124 196 240 / 0.13);
 }
 
 /* Register the tokens as Tailwind color utilities (bg-surface, text-muted,
@@ -175,6 +195,9 @@
   --color-graph-emphasis: var(--graph-emphasis);
   --color-graph-cut: var(--graph-cut);
   --color-graph-flow: var(--graph-flow);
+  --color-graph-hub: var(--graph-hub);
+  --color-graph-quiet: var(--graph-quiet);
+  --color-graph-checked: var(--graph-checked);
 }
 
 @layer base {
@@ -262,4 +285,90 @@
   .app-container {
     @apply mx-auto w-full max-w-[1200px] px-5 sm:px-8 lg:px-12;
   }
+}
+
+/* 3D network tooltip (3d-force-graph renders it as .float-tooltip-kap inside the canvas root).
+   Scoped to [data-graph-root] so nothing else on the page is affected. */
+[data-graph-root] .float-tooltip-kap {
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font: 12px/1.45 var(--font-sans), system-ui, sans-serif;
+  box-shadow: var(--shadow-card);
+  max-width: 240px;
+}
+[data-graph-root] .float-tooltip-kap b {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-weight: 600;
+}
+[data-graph-root] .float-tooltip-kap .tip-muted {
+  color: var(--muted);
+}
+
+/* ---- agent run, verdict, findings (components/AgentRun, VerdictHero, FindingsPanel) ---- */
+@layer components {
+  .algo-badge {
+    @apply inline-flex items-center rounded-md border border-line bg-inset px-1.5 py-[1px] font-mono text-[10.5px] text-muted;
+  }
+  .agent-live {
+    background:
+      radial-gradient(120% 140% at 0% 0%, var(--accent-soft), transparent 55%),
+      var(--surface);
+  }
+  .verdict-hero {
+    border-color: var(--line);
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
+  }
+  .verdict-suspicious {
+    border-color: var(--danger-line);
+    background:
+      radial-gradient(90% 120% at 0% 0%, var(--hero-glow-suspicious), transparent 60%),
+      radial-gradient(70% 90% at 100% 100%, var(--accent-soft), transparent 60%),
+      var(--surface);
+  }
+  .verdict-no_evidence {
+    border-color: var(--info-line);
+    background: radial-gradient(90% 120% at 0% 0%, var(--hero-glow-clear), transparent 60%), var(--surface);
+  }
+  .stat-tile {
+    @apply border-l-2 border-line pl-3;
+  }
+  .acct-chip {
+    @apply mx-[1px] inline-flex items-center rounded-md border border-line-strong bg-raised px-1.5 font-mono text-[0.86em] font-medium leading-[1.45] text-ink transition;
+  }
+  .acct-chip:hover,
+  .acct-chip:focus-visible {
+    @apply border-accent-line bg-accent-soft text-accent;
+  }
+  .ev-marker {
+    @apply ml-0.5 inline-grid h-[1.15em] min-w-[1.15em] place-items-center rounded-full border border-accent-line bg-accent-soft px-1 align-super font-mono text-[0.6em] font-semibold leading-none text-accent transition;
+  }
+  .ev-marker:hover {
+    @apply bg-accent-fill text-surface;
+  }
+  .graph-stage {
+    background:
+      radial-gradient(70% 60% at 50% 38%, var(--stage-glow), transparent 70%),
+      radial-gradient(45% 40% at 85% 25%, var(--stage-glow-2), transparent 70%),
+      var(--graph-bg);
+  }
+}
+
+@keyframes step-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes banner-in {
+  0% { opacity: 0; transform: scale(0.97); }
+  60% { opacity: 1; transform: scale(1.01); }
+  100% { transform: none; }
+}
+.step-in { animation: step-in 320ms ease-out both; }
+.freeze-banner { animation: banner-in 520ms ease-out both; }
+.verdict-hero { animation: step-in 420ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .step-in, .freeze-banner, .verdict-hero { animation: none; }
 }

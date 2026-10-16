@@ -164,6 +164,8 @@ function buildGraphStyles(t: GraphTokens): StylesheetJson {
 export interface Emphasis {
   nodeIds?: string[];
   edgeIds?: string[];
+  /** 3D view: fly the camera to the emphasized nodes (clicks); false for hover previews. */
+  fly?: boolean;
 }
 
 /** Positions for backend graphs where only the main path carries x_hint/y_hint:

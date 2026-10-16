@@ -54,6 +54,19 @@ class Settings:
     llm_api_key: str | None = field(default_factory=lambda: os.getenv("LLM_API_KEY") or None)
     llm_model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", "openai/gpt-oss-120b"))
     llm_timeout_s: int = field(default_factory=lambda: _int("LLM_TIMEOUT_S", 30))
+    # gpt-oss / Gemini "thinking" tokens count against per-minute limits: keep them low.
+    llm_reasoning_effort: str | None = field(default_factory=lambda: os.getenv("LLM_REASONING_EFFORT") or None)
+    # Fallback provider, tried when the primary is rate-limited or down (default: Gemini's
+    # OpenAI-compatible endpoint). GEMINI_API_KEY is accepted as a shortcut for the key.
+    llm_fallback_base_url: str = field(default_factory=lambda: os.getenv(
+        "LLM_FALLBACK_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"))
+    llm_fallback_api_key: str | None = field(
+        default_factory=lambda: os.getenv("LLM_FALLBACK_API_KEY") or os.getenv("GEMINI_API_KEY") or None)
+    llm_fallback_model: str = field(default_factory=lambda: os.getenv("LLM_FALLBACK_MODEL", "gemini-flash-lite-latest"))
+    llm_fallback_reasoning_effort: str | None = field(
+        default_factory=lambda: os.getenv("LLM_FALLBACK_REASONING_EFFORT") or None)
+    # Longest wait honoured when a provider answers 429 with a retry-after (seconds).
+    llm_max_wait_s: int = field(default_factory=lambda: _int("LLM_MAX_WAIT_S", 20))
 
     # Agent limits
     agent_max_turns: int = field(default_factory=lambda: _int("AGENT_MAX_TURNS", 6))
@@ -73,7 +86,7 @@ class Settings:
 
     @property
     def llm_enabled(self) -> bool:
-        return bool(self.llm_api_key)
+        return bool(self.llm_api_key or self.llm_fallback_api_key)
 
 
 settings = Settings()

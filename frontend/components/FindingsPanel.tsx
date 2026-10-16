@@ -1,5 +1,7 @@
 "use client";
 
+import { StepIcon } from "@/components/Icons";
+import { findingIcon, findingKeyFigure } from "@/lib/agentRun";
 import type { Evidence, Finding } from "@/lib/types";
 import { formatPct } from "@/lib/format";
 
@@ -10,6 +12,8 @@ interface Props {
   selectedEvidenceId: string | null;
   onSelectFinding: (id: string) => void;
   onSelectEvidence: (id: string) => void;
+  /** Hover preview: the graph highlights the finding's evidence while hovered. */
+  onHoverFinding?: (id: string | null) => void;
 }
 
 export default function FindingsPanel({
@@ -19,42 +23,49 @@ export default function FindingsPanel({
   selectedEvidenceId,
   onSelectFinding,
   onSelectEvidence,
+  onHoverFinding,
 }: Props) {
   if (findings.length === 0) return null;
   return (
-    <ul className="mt-2 space-y-1">
+    <ul className="mt-2 space-y-1.5">
       {findings.map((f) => {
         const selected = f.id === selectedFindingId;
+        const figure = findingKeyFigure(f);
         return (
           <li
             key={f.id}
-            className={`relative rounded-lg px-3 py-2.5 transition ${
-              selected ? "bg-accent-soft" : "hover:bg-raised"
+            onMouseEnter={() => onHoverFinding?.(f.id)}
+            onMouseLeave={() => onHoverFinding?.(null)}
+            className={`finding-card relative rounded-xl border px-3 py-2.5 transition ${
+              selected ? "border-accent-line bg-accent-soft" : "border-transparent hover:border-line hover:bg-raised"
             }`}
           >
-            {selected && (
+            <button type="button" className="flex w-full items-start gap-3 text-left" onClick={() => onSelectFinding(f.id)}>
               <span
-                aria-hidden="true"
-                className="absolute inset-y-2.5 left-0 w-0.5 rounded-full bg-accent-fill"
-              />
-            )}
-            <button type="button" className="block w-full text-left" onClick={() => onSelectFinding(f.id)}>
-              <div className="flex items-start justify-between gap-2">
-                <span className="text-[13px] font-medium leading-5 text-ink">{f.title}</span>
-                <span className="shrink-0 font-mono text-[11px] tabular-nums text-faint">
-                  {formatPct(f.confidence)} conf
+                className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${
+                  selected ? "border-accent-line text-accent" : "border-line text-muted"
+                }`}
+              >
+                <StepIcon name={findingIcon(f, evidence)} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-start justify-between gap-3">
+                  <span className="text-[13px] font-medium leading-5 text-ink">{f.title}</span>
+                  {figure && (
+                    <span className="shrink-0 font-mono text-[15px] font-semibold leading-5 tabular-nums text-ink">{figure}</span>
+                  )}
                 </span>
-              </div>
-              <p className="mt-1 text-xs leading-relaxed text-muted">{f.detail}</p>
-              <div className="mt-2 h-1 w-full overflow-hidden rounded bg-line" aria-hidden="true">
-                <div
-                  className="h-full rounded bg-accent-fill"
-                  style={{ width: `${Math.round(f.confidence * 100)}%` }}
-                />
-              </div>
+                <span className={`mt-1 block text-xs leading-relaxed text-muted ${selected ? "" : "line-clamp-2"}`}>{f.detail}</span>
+                <span className="mt-1.5 flex items-center gap-2" aria-label={`confidence ${formatPct(f.confidence)}`}>
+                  <span className="h-1 w-16 overflow-hidden rounded bg-line" aria-hidden="true">
+                    <span className="block h-full rounded bg-accent-fill" style={{ width: `${Math.round(f.confidence * 100)}%` }} />
+                  </span>
+                  <span className="font-mono text-[10.5px] tabular-nums text-faint">{formatPct(f.confidence)} confidence</span>
+                </span>
+              </span>
             </button>
-            {f.evidence_refs.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
+            {selected && f.evidence_refs.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5 pl-11">
                 {f.evidence_refs.map((ref) => {
                   const ev = evidence.find((e) => e.id === ref);
                   const evidenceSelected = ref === selectedEvidenceId;

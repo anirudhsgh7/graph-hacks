@@ -1,7 +1,15 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { mockCases } from "@/lib/mocks";
+import burst from "@/lib/mocks/investigate-case-001-burst.json";
 import { API_BASE, IS_MOCK } from "@/lib/api";
+import { formatStat, headlineStats } from "@/lib/agentRun";
+import HeroGraph from "@/components/HeroGraph";
+import type { InvestigationResponse } from "@/lib/types";
+
+// Headline numbers for the hero come from the recorded case-001 backend response.
+const CASE_001 = burst as unknown as InvestigationResponse;
+const HERO_STATS = headlineStats(CASE_001).slice(0, 3);
 
 // Presentation-only tags describing the nature of each scripted alert
 // (plan.md §5) — not risk scores. The two suspicious scenarios carry the
@@ -81,20 +89,57 @@ const CAPABILITIES = [
 export default function Home() {
   return (
     <main className="app-container flex-1 py-10 lg:py-12">
-      {/* Intro */}
-      <section className="max-w-3xl">
-        <p className="eyebrow">Graph Hacks · Track 1 — Agents that act on connected data</p>
-        <h1 className="mt-3 text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-4xl">
-          Investigate money movement on the graph
-        </h1>
-        <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-muted">
-          An agent investigates AML alerts on a transaction graph in FalkorDB — detecting mule rings, tracing money
-          trails, and simulating the effect of freezing accounts. Every finding ties back to graph evidence.
-        </p>
+      {/* Hero: the promise, the proof, and the network itself */}
+      <section className="grid grid-cols-1 items-center gap-8 lg:grid-cols-12">
+        <div className="min-w-0 lg:col-span-6">
+          <p className="eyebrow">Graph Hacks · Track 1 — Agents that act on connected data</p>
+          <h1 className="mt-3 text-[34px] font-semibold leading-[1.08] tracking-tight text-ink sm:text-5xl">
+            Find the mule ring.
+            <br />
+            <span className="text-accent">Prove the smallest freeze.</span>
+          </h1>
+          <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-muted">
+            An AI agent investigates AML alerts on a FalkorDB transaction graph — rings, money trails, laundering
+            capacity — then proves which accounts to freeze on a copy of the graph before anyone acts. Every claim is a
+            graph query you can replay.
+          </p>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <Link href="/case/case-001?run=1" className="btn btn-primary h-11 px-5 text-[14px]">
+              Watch it catch a ring →
+            </Link>
+            <a href="#cases" className="btn h-11 px-4 text-[14px]">
+              Browse cases
+            </a>
+          </div>
+          <dl className="mt-7 grid max-w-lg grid-cols-3 gap-4">
+            {HERO_STATS.map((st) => (
+              <div key={st.key} className="stat-tile">
+                <dt className="sr-only">{st.label}</dt>
+                <dd>
+                  <span className="block font-mono text-[22px] font-semibold leading-none tabular-nums text-ink sm:text-[26px]">
+                    {formatStat(st)}
+                  </span>
+                  <span className="mt-1.5 block text-[11.5px] leading-snug text-muted">{st.label}</span>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+        <div className="min-w-0 lg:col-span-6">
+          <div className="graph-stage relative h-[300px] overflow-hidden rounded-2xl border border-line sm:h-[380px] lg:h-[440px]">
+            <HeroGraph graph={CASE_001.graph} seeds={["A17"]} />
+            <div className="pointer-events-none absolute bottom-3 left-3 right-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-graph-ring" />mule ring</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-graph-trail" />money moving</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full border-2 border-graph-cut" />freeze here</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rotate-45 bg-graph-device" />shared phone</span>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* Case board */}
-      <section className="mt-10">
+      <section id="cases" className="mt-14 scroll-mt-20">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h2 className="eyebrow">Case board</h2>
           <p className="text-[11px] text-faint">Four scripted cases — two suspicious, two honest false alarms</p>

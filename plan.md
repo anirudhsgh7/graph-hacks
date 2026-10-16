@@ -268,10 +268,10 @@ Success response (see `frontend/lib/mocks/scenario-1.json` for a full, valid exa
 2. **Question bar** — free-text input + **Investigate** button, plus per-case **suggested questions**
    (chips). In mock mode the first suggested question auto-runs on page load so the deployed shell
    demos itself.
-3. **Loading banner** (while the agent works) — pulsing dot, live elapsed-seconds counter, skeleton lines.
+3. **Live agent timeline** (while the agent works) — each graph step appears as it runs (plain-language name, algorithm badge, headline), elapsed counter. Streamed from `/api/investigate/stream`.
 4. **Error banner** (rose) — error code, human message, **Retry** button.
 5. **Main grid**
-   - **Left: Transaction network** — the Cytoscape canvas + legend (ring / trail / frozen).
+   - **Left: Transaction network** — route strip (the money trail in plain words + the freeze plan), the **3D network** (default; 2D Cytoscape on a switch / without WebGL) and a legend listing only what is on screen. The agent's conclusion now sits full-width above this grid.
    - **Right:**
      - **Agent summary** — the narrative + chips (asked question, model, tool-call count, latency).
      - **No-evidence banner** (sky blue) when `status: "no_evidence"`.
@@ -499,6 +499,9 @@ Status: ✅ locked · 🟡 drafted (awaiting teammate sign-off) · ⏳ deferred.
 | D9 | Integration timing | 🟡 | M1 Day 2 21:00; M2 Day 3 21:00; mock-first in between |
 | D10 | Deployment path + demo posture | 🟡 | Vercel + Render + Cloud; submit by Sun 20:00; video fallback |
 | D11 | Testing/docs/submission plan | 🟡 | Phase 3 checklist (§11) |
+| D12 | Network visual | 🟡 | 3D by default (two floors: money moving left → right above, shared phones/IPs below); Cytoscape 2D kept as a switch + WebGL fallback (Oct 16) |
+| D14 | Demo UX | 🟡 | Dark "investigation room" default; live agent timeline (SSE) → verdict hero with numbers → graph assembles step by step → freeze moment (capacity drains, "Route cut") → proof strip with algorithm badges; landing hero with the live case-001 network (Oct 16) |
+| D13 | Free-tier LLM | 🟡 | Token-lean loop (~8K/investigation) + retry-after wait + Groq → Gemini fallback; rule-based only if every provider fails (Oct 16) |
 
 🟡 items are **defaults awaiting the teammate meeting** — one by one, they become ✅ or get re-decided.
 
