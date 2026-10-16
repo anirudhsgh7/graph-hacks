@@ -3,9 +3,6 @@
 **An AML investigation agent that doesn't just find the mule ring - it tells you the smallest
 freeze that stops it, and proves it on a copy of the graph before anyone touches a real account.**
 
-By
-Nishant
-Airudh
 
 Graph Hacks (WeMakeDevs x FalkorDB) - **Track 1: Agents That Act on Connected Data**
 
