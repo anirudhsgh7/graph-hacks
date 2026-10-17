@@ -2,7 +2,13 @@
 
 **An agent-driven AML investigation console where FalkorDB graph algorithms are the product — not decoration.**
 
-**Track 1 — Agents That Act on Connected Data** · [Graph Hacks: Context for AI Agents](https://www.wemakedevs.org/hackathons/falkordb) (WeMakeDevs × FalkorDB, Oct 15–18, 2026) · built by a team of two
+**Track 1 — Agents That Act on Connected Data** · [Graph Hacks: Context for AI Agents](https://www.wemakedevs.org/hackathons/falkordb) (WeMakeDevs × FalkorDB, Oct 15–18, 2026)
+
+**Built by a team of two:**
+
+**[Nishant Nikhil Gupta](https://www.linkedin.com/in/nishant-nikhil-gupta-78b828379/)**
+
+**[Anirudh Singh](https://www.linkedin.com/in/anirudh-singh-bb9497287/)**
 
 > **Live demo:** [graph-hacks-cyan.vercel.app](https://graph-hacks-cyan.vercel.app) ⟷ [follow-the-money-api.onrender.com/api/health](https://follow-the-money-api.onrender.com/api/health) ⟷ FalkorDB Cloud
 > **Demo video:** _link added at submission_
