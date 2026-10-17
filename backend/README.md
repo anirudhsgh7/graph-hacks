@@ -30,6 +30,7 @@ it, which you can replay.
 | **What-if forks** | Simulations never touch live data: copy the graph, delete the accounts, re-run SPpaths and max-flow, drop the copy. After a real freeze, every movement tool automatically reasons over the graph *as money can move today*. |
 | **Receipts** | Each evidence item lists the named queries and parameters behind it. `POST /api/evidence/replay` re-runs one read-only and returns the same rows with a fingerprint. Judges can paste the Cypher into FalkorDB Browser. |
 | **The model cannot overrule the graph** | The verdict (suspicious / no evidence) is a fixed rule over graph measurements. The LLM chooses tools and writes the narrative. If it disagrees with the rule, cites evidence that doesn't exist, or returns malformed output, its text is dropped and a deterministic summary is used. Actions are derived from evidence by the server; the model cannot propose or execute them. |
+| **Graph honesty** | Unknown account ids in a question are refused before any query or model call (`NOT_IN_GRAPH`, 404). The model's prose is fact-checked against the results (`agent/factcheck.py`): every account id and dollar amount must exist in graph results, or the deterministic text is used. Investigations are linked to the accounts they are about (`(:Investigation)-[:ABOUT]->(:Account)`), and cross-case recall feeds the next investigation. |
 | **Time-respecting trails** | A shortest path is only called a money trail if real transfers follow it *in time order* with money not growing along the way. Coincidental routes through ordinary payments are labelled `structural`, not presented as laundering. |
 | **Honest false alarms** | The busiest merchant tops the legacy anomaly score. The agent explains why (320 customers who each paid once, nothing passed on, settlements to the owner's own account) and recommends closing the alert. A family sharing a tablet is likewise cleared. |
 | **Works without an LLM** | With no API key, or if the provider is down or rate-limited, a rule-based investigator runs the same tools. The demo never depends on a third-party API. |
@@ -66,7 +67,7 @@ One investigation (`backend/agent/loop.py`):
 1. **Tools** (`agent/tools.py`): 11 fixed, parameterised tools. The model picks tools and fills parameters; it never writes Cypher and has no write access.
 2. **Evidence** (`agent/evidence.py`): every tool registers what it saw (`ev-1`, `ev-2`...) with node ids, edge ids, key numbers and query receipts.
 3. **Verdict** (`agent/summarize.py`): suspicious if a mule ring was measured, a payment was traced through 3 or more fee-skimming hops, or 5 or more pass-through transfers were found. Otherwise no evidence. Thresholds sit at the top of `agent/tools.py`.
-4. **Narrative**: the model's findings are kept only if they cite real evidence ids and agree with the verdict.
+4. **Narrative**: the model's findings are kept only if they cite real evidence ids, agree with the verdict, and pass the fact check — account ids and dollar amounts in the prose must exist in the graph results (`agent/factcheck.py`).
 5. **Actions** (`agent/actions.py`): derived from evidence, each with evidence refs, and a simulation for freezes. Nothing changes until the analyst confirms.
 
 ## Graph data model
@@ -100,7 +101,7 @@ source), and real transfer data has many payments between the same two accounts.
 
 ## Queries and algorithms
 
-Every query the product runs lives in [`queries/`](queries/), and the backend loads them from there
+Every query the product runs lives in [`queries/`](../queries/), and the backend loads them from there
 by name. The folder is therefore exactly what runs; `GET /api/queries` lists it live.
 
 | File | Contents |
@@ -110,7 +111,7 @@ by name. The folder is therefore exactly what runs; `GET /api/queries` lists it 
 | `02_rings.cypher` | shared-infrastructure pivot, **`algo.WCC`** components, layering (pass-through) pattern |
 | `03_trails.cypher` | **`algo.SPpaths`** routes, transfers behind each hop, forward tracing of a payment |
 | `04_flow.cypher` | **`algo.pageRank`**, **`algo.maxFlow`**, paged `FLOWS_TO` read, counterparty volumes, fork edit |
-| `05_console.cypher` | case store, proposals, freeze/flag writes, audit trail, canvas subgraph |
+| `05_console.cypher` | case store, proposals, freeze/flag writes, audit trail, canvas subgraph, investigation↔account memory (`ABOUT`) and cross-case recall |
 
 ## Demo scenarios (planted ground truth)
 
@@ -139,7 +140,7 @@ cp .env.example .env                      # add LLM_API_KEY (OpenRouter), or lea
 python -m seed.load --verify              # build the demo graph, then run the 17 ground-truth checks
 uvicorn app.main:app --reload --port 8000 # API at http://localhost:8000, docs at /docs
 
-pytest -q                                 # 34 tests against the running FalkorDB (uses graph "ftm_test")
+pytest -q                                 # 45 tests against the running FalkorDB (uses graph "ftm_test")
 ```
 
 Try it:
@@ -178,6 +179,8 @@ identical world in about a second.
 | `GET` | `/api/health` | DB, LLM and capability status |
 | `POST` | `/api/admin/reseed` | Rebuild and verify the demo graph (token required) |
 
+Unknown account ids in a question are refused with `NOT_IN_GRAPH` (404) before any query or model call.
+
 Full contract: [`docs/api-contract.md`](docs/api-contract.md). Real responses for every scenario:
 [`frontend/lib/mocks/`](frontend/lib/mocks/). OpenAPI: `backend/openapi.json`.
 
@@ -198,5 +201,9 @@ Full contract: [`docs/api-contract.md`](docs/api-contract.md). Real responses fo
 
 ## AI-assistant disclosure (rule 11)
 
-The backend was written with the help of an AI coding assistant (Claude, Anthropic).
-**Team: before submitting, describe here what you reviewed, changed and can explain yourselves (rule 12).**
+This project was built inside the hackathon window with AI coding assistants (Anthropic's Claude
+and an OpenCode-based agent) used as development tools. Both team members directed the work,
+reviewed and edited every change, and can explain the graph model, the queries, the architecture and
+the technical decisions behind them (rule 12). The product's runtime LLM (via OpenRouter) only
+selects tools and writes the narrative; verdicts, findings and actions are deterministic code over
+FalkorDB measurements, and the backend runs without it (`meta.mode: rule_based`).
