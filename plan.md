@@ -512,6 +512,7 @@ Status: ✅ locked · 🟡 drafted (awaiting teammate sign-off) · ⏳ deferred.
 | D11 | Testing/docs/submission plan | 🟡 | Phase 3 checklist (§11) |
 | D12 | Network visual | 🟡 | 3D by default (two floors: money moving left → right above, shared phones/IPs below); Cytoscape 2D kept as a switch + WebGL fallback (Oct 16) |
 | D14 | Demo UX | 🟡 | Dark "investigation room" default; live agent timeline (SSE) → verdict hero with numbers → graph assembles step by step → freeze moment (capacity drains, "Route cut") → proof strip with algorithm badges; landing hero with the live case-001 network (Oct 16) |
+| D15 | Graph honesty | ✅ | Names resolved before reasoning (`NOT_IN_GRAPH`), model prose fact-checked against graph results (`meta.summary_check`), cross-case recall via `(:Investigation)-[:ABOUT]->(:Account)` (`recall[]`); API contract v1.3 (Oct 17) |
 | D13 | Free-tier LLM | ✅ | Token-lean loop (~8K/investigation) + retry-after wait + OpenRouter primary → second free model fallback; hosted `AGENT_BUDGET_S=90` (free models are slow); rule-based only if every provider fails (Oct 17) |
 
 🟡 items are **defaults awaiting the teammate meeting** — one by one, they become ✅ or get re-decided.

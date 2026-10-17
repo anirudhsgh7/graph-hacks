@@ -1485,6 +1485,14 @@
           },
           "meta": {
             "$ref": "#/components/schemas/Meta"
+          },
+          "recall": {
+            "items": {
+              "$ref": "#/components/schemas/RecallItem"
+            },
+            "type": "array",
+            "title": "Recall",
+            "default": []
           }
         },
         "type": "object",
@@ -1601,6 +1609,16 @@
             },
             "type": "array",
             "title": "Notes"
+          },
+          "summary_check": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "replaced",
+              "not_needed"
+            ],
+            "title": "Summary Check",
+            "default": "not_needed"
           }
         },
         "type": "object",
@@ -1675,6 +1693,52 @@
           "evidence_refs"
         ],
         "title": "ProposedAction"
+      },
+      "RecallItem": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "case_title": {
+            "type": "string",
+            "title": "Case Title"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "investigated",
+              "action"
+            ],
+            "title": "Kind"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "account_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Account Ids"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "case_id",
+          "case_title",
+          "kind",
+          "label",
+          "account_ids",
+          "created_at"
+        ],
+        "title": "RecallItem",
+        "description": "Memory across cases: an account in this investigation was seen in another case."
       },
       "Receipt": {
         "properties": {

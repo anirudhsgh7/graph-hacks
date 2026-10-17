@@ -5,9 +5,11 @@
         -> evidence (every tool result registers what it saw, with query receipts)
         -> verdict (deterministic rule over evidence)        agent/summarize.py
         -> findings + summary (model's, if valid and agrees; otherwise deterministic)
+        -> fact-check: the model's prose may name only accounts/amounts the graph returned
         -> proposed actions (server-derived, evidence-gated)  agent/actions.py
         -> subgraph for the canvas                            agent/graphview.py
-        -> stored on the case in FalkorDB
+        -> stored on the case in FalkorDB, linked (:Investigation)-[:ABOUT]->(:Account)
+           so later investigations in other cases recall it (memory as graph)
 """
 from __future__ import annotations
 
@@ -21,11 +23,11 @@ from typing import Any, Callable
 
 from pydantic import BaseModel, Field, ValidationError
 
-from agent import actions, graphview, planner, summarize
+from agent import actions, factcheck, graphview, planner, summarize
 from agent.digest import digest, dumps, evidence_ledger
 from agent.llm import ChatSession, LLMError
 from agent.prompts import FINAL, NARRATOR, SYSTEM, case_context
-from agent.tools import TOOLS, Run, call_tool, openai_tool_specs
+from agent.tools import TOOLS, Run, call_tool, iso, openai_tool_specs
 from app.config import settings
 from graph.db import Database
 from graph.queries import cypher
@@ -232,6 +234,40 @@ def _llm_investigation(s: _Session, chat: ChatSession, question: str, context: s
     return None
 
 
+def _recall(live: Any, ids: list[str], case_id: str | None) -> list[dict]:
+    """What other cases already know about these accounts: earlier investigations that
+    implicated them and analyst actions taken on them (two read-only graph walks)."""
+    if not ids:
+        return []
+    params = {"ids": sorted(set(ids)), "case_id": case_id}
+    out = [{"case_id": r["case_id"], "case_title": r["case_title"], "kind": "investigated",
+            "label": {"suspicious": "concluded suspicious", "no_evidence": "found no evidence"}.get(
+                r["conclusion"], "was inconclusive"),
+            "account_ids": sorted(r["account_ids"]), "created_at": iso(r["created_at"]) or ""}
+           for r in live.ro("recall_investigations", params)]
+    out += [{"case_id": r["case_id"], "case_title": r["case_title"], "kind": "action",
+             "label": r["label"] or r["type"], "account_ids": sorted(r["account_ids"]),
+             "created_at": iso(r["created_at"]) or ""}
+            for r in live.ro("recall_actions", params)]
+    return sorted(out, key=lambda r: r["created_at"], reverse=True)
+
+
+def _memory_lines(recall: list[dict]) -> list[str]:
+    return [f"{', '.join(r['account_ids'])}: {'an investigation ' if r['kind'] == 'investigated' else ''}"
+            f"{r['label']} in {r['case_id']} ({r['case_title']})" for r in recall]
+
+
+def _implicated(seeds: list[str], evidence: Any, proposed: list[dict]) -> list[str]:
+    """Accounts an investigation is ABOUT: its seeds, ring members it found, accounts it
+    proposed to act on. (Not every account on a route - that would recall too much.)"""
+    accs = list(seeds)
+    for e in evidence.of_type("community"):
+        accs += [n for n in e.node_ids if factcheck.ACCOUNT_ID.match(n)]
+    for a in proposed:
+        accs += a["account_ids"]
+    return sorted(set(accs))
+
+
 def _validated_findings(answer: _Answer, s: _Session) -> list[dict]:
     out = []
     for f in answer.findings:
@@ -278,9 +314,22 @@ def investigate(db: Database, question: str, case_id: str | None = None,
     notes: list[str] = []
     named = [m.upper() for m in ACCOUNT_RE.findall(question)]
     known = {r["id"] for r in live.ro("accounts_by_id", {"ids": named})} if named else set()
+    unknown = [a for a in dict.fromkeys(named) if a not in known]
+    if unknown:
+        # Resolve names against the graph before any reasoning: the model never gets to
+        # reason about an account that does not exist (and we never silently swap in the
+        # case's own accounts instead).
+        verb = "is" if len(unknown) == 1 else "are"
+        raise InvestigationError(
+            "NOT_IN_GRAPH",
+            f"{', '.join(unknown)} {verb} not in the graph, so nothing was investigated - no query or model "
+            f"call ran on {'that name' if len(unknown) == 1 else 'those names'}. "
+            "Account ids look like A17, H3, C42 or M8.")
     seeds = [a for a in dict.fromkeys(named) if a in known] or list((case or {}).get("seed_accounts") or [])
     previous = live.ro("investigation_list", {"case_id": case_id}) if case_id else []
-    context = case_context(case, sorted(s.run.frozen()), previous[0]["summary"] if previous else None)
+    memory = _recall(live, seeds, case_id)
+    context = case_context(case, sorted(s.run.frozen()), previous[0]["summary"] if previous else None,
+                           _memory_lines(memory))
 
     mode, answer, model = "rule_based", None, None
     llm_failed = False
@@ -310,6 +359,7 @@ def investigate(db: Database, question: str, case_id: str | None = None,
     narrative = "deterministic"
     findings = summarize.findings(s.run.evidence, conclusion)
     summary_text = summarize.summary(s.run.evidence, conclusion, findings, seeds[0] if seeds else None)
+    graph_summary, graph_findings = summary_text, findings
     if answer is not None:
         if answer.conclusion != conclusion:
             notes.append(f"model concluded '{answer.conclusion}' but the graph rule says '{conclusion}'; "
@@ -320,6 +370,25 @@ def investigate(db: Database, question: str, case_id: str | None = None,
                 findings, summary_text, narrative = checked, answer.summary.strip(), "llm"
             else:
                 notes.append("none of the model's findings cited valid evidence; deterministic findings used")
+
+    # Fact-check the model's prose against what the graph returned (agent/factcheck.py).
+    summary_check = "not_needed"
+    if narrative == "llm":
+        allowed = set(seeds) | set(s.run.frozen()) | {a for r in memory for a in r["account_ids"]}
+        kept = []
+        for f in findings:
+            bad = factcheck.check(f"{f['title']} {f['detail']}", s.run.evidence.all(), allowed)
+            if bad:
+                notes.append(f"fact-check dropped finding '{f['title']}': {bad[0]}")
+            else:
+                kept.append(f)
+        findings = kept or graph_findings
+        problems = factcheck.check(summary_text, s.run.evidence.all(), allowed)
+        if problems:
+            notes.append("fact-check: " + "; ".join(problems[:3]) + " - summary rebuilt from the graph results")
+            summary_text, summary_check = graph_summary, "replaced"
+        else:
+            summary_check = "passed"
     for i, f in enumerate(findings, start=1):
         f["id"] = f"f-{i}"
         findings[i - 1] = {"id": f["id"], "title": f["title"], "detail": f["detail"],
@@ -327,6 +396,8 @@ def investigate(db: Database, question: str, case_id: str | None = None,
         on_event and on_event("finding", {"id": f["id"], "title": f["title"]})
 
     proposed = actions.propose(s.run, s.run.evidence, conclusion, findings)
+    seen_elsewhere = _recall(live, sorted({n for e in s.run.evidence.all() for n in e.node_ids
+                                           if factcheck.ACCOUNT_ID.match(n)} | set(seeds)), case_id)
     graph = graphview.build(live, s.run.evidence, seeds[:1])
     caps = db.capabilities()
     status = "partial" if s.over_budget() and conclusion == "inconclusive" else \
@@ -346,13 +417,17 @@ def investigate(db: Database, question: str, case_id: str | None = None,
         "meta": {"mode": mode, "model": model, "narrative_source": narrative,
                  "tool_iterations": len(s.trace), "latency_ms": int((time.time() - s.started) * 1000),
                  "maxflow_engine": "falkordb" if caps.get("maxflow") else "python",
-                 "frozen_accounts": sorted(s.run.frozen()), "notes": notes},
+                 "frozen_accounts": sorted(s.run.frozen()), "notes": notes,
+                 "summary_check": summary_check},
+        "recall": seen_elsewhere,
     }
     if case_id:
         live.rw("investigation_create", {"case_id": case_id, "id": inv_id, "question": question,
                                          "created_at": int(time.time() * 1000), "conclusion": conclusion,
                                          "mode": mode, "summary": summary_text,
                                          "payload": json.dumps(payload, default=str)})
+        live.rw("investigation_link_accounts",
+                {"id": inv_id, "accounts": _implicated(seeds, s.run.evidence, proposed)})
         for a in proposed:
             live.rw("proposal_create", {"investigation_id": inv_id, "id": a["id"], "case_id": case_id,
                                         "type": a["type"], "label": a["label"], "account_ids": a["account_ids"],

@@ -40,13 +40,17 @@ Use at most 5 findings. Every finding needs at least one evidence id from the to
 Copy numbers exactly as the tools reported them."""
 
 
-def case_context(case: dict | None, frozen: list[str], previous_summary: str | None) -> str:
+def case_context(case: dict | None, frozen: list[str], previous_summary: str | None,
+                 memory: list[str] | None = None) -> str:
     if not case:
-        return "No case is open; investigate the accounts named in the question."
-    lines = [f"Case {case['id']}: {case['title']}", f"Alert: {case['alert']}",
-             f"Seed accounts: {', '.join(case.get('seed_accounts') or [])}"]
+        lines = ["No case is open; investigate the accounts named in the question."]
+    else:
+        lines = [f"Case {case['id']}: {case['title']}", f"Alert: {case['alert']}",
+                 f"Seed accounts: {', '.join(case.get('seed_accounts') or [])}"]
     if frozen:
         lines.append(f"Accounts already frozen by the analyst: {', '.join(frozen)}")
     if previous_summary:
         lines.append(f"Previous finding on this case: {previous_summary}")
+    if memory:
+        lines.append("Seen in other cases (from the graph): " + "; ".join(memory[:5]))
     return "\n".join(lines)

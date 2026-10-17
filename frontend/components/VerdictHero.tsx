@@ -4,6 +4,7 @@
 // account chips (hover/click lights the account in the graph) and evidence markers on
 // every amount the graph measured.
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckIcon } from "@/components/Icons";
 import { formatStat, headlineStats, summaryParts, type Stat } from "@/lib/agentRun";
@@ -80,6 +81,8 @@ export default function VerdictHero({
   }, [parts]);
   const c = response.conclusion;
   const runKey = response.investigation_id;
+  const check = response.meta.summary_check;
+  const recall = response.recall ?? [];
 
   return (
     <section className={`verdict-hero verdict-${c} relative overflow-hidden rounded-2xl border px-4 py-5 sm:px-6`}>
@@ -175,6 +178,54 @@ export default function VerdictHero({
           );
         })}
       </p>
+
+      {check === "passed" && (
+        <p className="mt-2 flex items-center gap-1.5 text-[11.5px] leading-relaxed text-ok">
+          <CheckIcon className="h-3.5 w-3.5" />
+          Fact-checked: every account and amount above appears in the graph results.
+        </p>
+      )}
+      {check === "replaced" && (
+        <p className="mt-2 text-[11.5px] leading-relaxed text-muted">
+          The model&apos;s wording named something the graph did not return, so this conclusion was rebuilt from
+          the graph results.
+        </p>
+      )}
+
+      {recall.length > 0 && (
+        <div className="mt-4 rounded-xl border border-info-line bg-info-soft px-3.5 py-2.5">
+          <h3 className="eyebrow">Seen in other cases · recalled from the graph</h3>
+          <ul className="mt-1.5 space-y-1">
+            {recall.slice(0, 4).map((r) => (
+              <li key={`${r.case_id}-${r.kind}-${r.created_at}`} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-ink">
+                <span className={`badge ${r.kind === "action" ? "badge-warn" : "badge-info"}`}>
+                  {r.kind === "action" ? "action" : "investigated"}
+                </span>
+                <span className="font-mono">
+                  {r.account_ids.map((id, i) => (
+                    <span key={id}>
+                      {i > 0 && ", "}
+                      <button
+                        type="button"
+                        className="acct-chip"
+                        onMouseEnter={() => onFocusAccount(id, false)}
+                        onMouseLeave={() => onFocusAccount(null, false)}
+                        onClick={() => onFocusAccount(id, true)}
+                      >
+                        {id}
+                      </button>
+                    </span>
+                  ))}
+                </span>
+                <span className="text-muted">{r.label} in</span>
+                <Link href={`/case/${r.case_id}`} className="font-medium text-accent underline-offset-2 hover:underline">
+                  {r.case_title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {c === "no_evidence" && (
         <p className="mt-2 text-[11.5px] leading-relaxed text-faint">

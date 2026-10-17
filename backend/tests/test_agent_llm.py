@@ -3,38 +3,9 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from tests import fake_llm
+from tests.conftest import PORT
 from tests.fake_llm import reply_text, reply_tools, tool_call
-
-PORT = 8765
-
-
-@pytest.fixture(scope="module")
-def llm_server():
-    server = fake_llm.serve(PORT)
-    yield
-    server.should_exit = True
-
-
-@pytest.fixture()
-def llm(llm_server, fresh):
-    """Point the agent at the fake server for one test."""
-    from app.config import settings
-    keys = ("llm_api_key", "llm_base_url", "llm_model", "llm_fallback_api_key", "llm_fallback_base_url",
-            "llm_fallback_model", "llm_reasoning_effort", "llm_max_wait_s")
-    saved = {k: getattr(settings, k) for k in keys}
-    object.__setattr__(settings, "llm_api_key", "test-key")
-    object.__setattr__(settings, "llm_base_url", f"http://127.0.0.1:{PORT}/v1")
-    object.__setattr__(settings, "llm_model", "fake-model")
-    object.__setattr__(settings, "llm_fallback_api_key", None)   # tests opt in to a fallback
-    object.__setattr__(settings, "llm_reasoning_effort", None)
-    for lst in (fake_llm.SCRIPT, fake_llm.REQUESTS, fake_llm.SCRIPT_ALT, fake_llm.REQUESTS_ALT):
-        lst.clear()
-    yield fake_llm
-    for k, v in saved.items():
-        object.__setattr__(settings, k, v)
 
 
 def _with_fallback():

@@ -341,7 +341,17 @@ export default function CaseView({ caseId }: { caseId: string }) {
 
       {loading && <LiveTimeline steps={liveSteps} elapsedMs={elapsedMs} question={pendingQuestion} />}
 
-      {error && (
+      {error?.code === "NOT_IN_GRAPH" && (
+        <div className="rounded-lg border border-line bg-surface px-4 py-3.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="badge badge-neutral">not in the graph</span>
+            <span className="text-[13px] text-muted">Checked against FalkorDB before any reasoning.</span>
+          </div>
+          <p className="mt-2 text-sm leading-relaxed text-ink">{error.message}</p>
+        </div>
+      )}
+
+      {error && error.code !== "NOT_IN_GRAPH" && (
         <div className="rounded-lg border border-danger-line bg-danger-soft px-4 py-3.5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="badge badge-danger font-mono">{error.code}</span>

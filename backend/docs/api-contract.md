@@ -33,7 +33,8 @@ Response (`InvestigateResponse`; see `investigate-case-001-burst.json`):
 | `proposed_actions[]` | `{id, type, label, account_ids[], requires_confirmation, evidence_refs[], simulation}` |
 | `trace[]` | `{step, tool, args, ok, rows, duration_ms, headline, evidence_ids[], error?}` - the agent timeline |
 | `graph` | `{nodes[], edges[], highlight{}}` - bounded subgraph, at most 150 nodes |
-| `meta` | `{mode: llm\|rule_based, model, narrative_source: llm\|deterministic, tool_iterations, latency_ms, maxflow_engine, frozen_accounts[], notes[]}` |
+| `meta` | `{mode: llm\|rule_based, model, narrative_source: llm\|deterministic, tool_iterations, latency_ms, maxflow_engine, frozen_accounts[], notes[], summary_check: passed\|replaced\|not_needed}` |
+| `recall[]` | `{case_id, case_title, kind: investigated\|action, label, account_ids[], created_at}` - what OTHER cases already know about accounts in this investigation (newest first) |
 
 **Evidence `type` values** and what the UI can do with them:
 
@@ -126,6 +127,7 @@ Only the read-only product queries can be replayed.
 | `BAD_REQUEST` | 400 | inline message (e.g. "name an account or open a case") |
 | `UNAUTHORIZED` | 401 | token missing on actions |
 | `NOT_FOUND` | 404 | unknown case |
+| `NOT_IN_GRAPH` | 404 | the question names an account that does not exist; nothing ran. Show as an answer ("A999 is not in the graph"), not as a failure |
 | `ACTION_CONFLICT` | 409 | inline on the action card, then refresh the snapshot |
 | `RATE_LIMITED` | 429 | "try again in a minute" |
 | `DB_UNAVAILABLE` | 503 | red banner; free hosting may be waking up |
@@ -138,3 +140,4 @@ An LLM outage is **not** an error: the investigation completes in rule-based mod
 
 - v1 (Oct 15): initial contract.
 - v1.2 (Oct 16, additive): `meta.model` is the model that actually answered (may be the fallback provider's); `meta.notes` can include provider waits ("groq rate-limited; waited 6.0s as it asked") and switches ("...; switched to gemini (gemini-flash-lite-latest)"). `health.llm_model` lists the chain, e.g. `openai/gpt-oss-120b -> gemini-flash-lite-latest`.
+- v1.3 (Oct 17, additive): `meta.summary_check` - the model's summary may name only accounts and amounts that graph results contain; otherwise it is replaced by the deterministic one (`replaced`, with a `meta.notes` line saying which claim failed). `recall[]` - earlier investigations and analyst actions in other cases on the same accounts, found via `(:Investigation)-[:ABOUT]->(:Account)` and `(:Action)-[:TARGETS]->(:Account)`. New error `NOT_IN_GRAPH` (404) when a named account does not exist; previously the case's own accounts were investigated instead.

@@ -131,6 +131,18 @@ export interface InvestigationMeta {
   frozen_accounts: string[];
   /** e.g. "LLM_UNAVAILABLE: ..." when the investigation fell back. */
   notes: string[];
+  /** Model summary checked against graph results: passed, or replaced by the deterministic one. */
+  summary_check?: "passed" | "replaced" | "not_needed";
+}
+
+/** Memory across cases: an account in this investigation was seen in another case. */
+export interface RecallItem {
+  case_id: string;
+  case_title: string;
+  kind: "investigated" | "action";
+  label: string;
+  account_ids: string[];
+  created_at: string;
 }
 
 export interface InvestigationResponse {
@@ -147,6 +159,7 @@ export interface InvestigationResponse {
   trace: TraceStep[];
   graph: GraphPayload;
   meta: InvestigationMeta;
+  recall?: RecallItem[];
 }
 
 export interface GraphDelta {

@@ -126,6 +126,19 @@ class Meta(BaseModel):
     maxflow_engine: Literal["falkordb", "python"]
     frozen_accounts: list[str]
     notes: list[str]
+    # passed: the model's summary named only accounts/amounts the graph returned;
+    # replaced: it did not, so the deterministic summary was used; not_needed: no model summary
+    summary_check: Literal["passed", "replaced", "not_needed"] = "not_needed"
+
+
+class RecallItem(BaseModel):
+    """Memory across cases: an account in this investigation was seen in another case."""
+    case_id: str
+    case_title: str
+    kind: Literal["investigated", "action"]
+    label: str
+    account_ids: list[str]
+    created_at: str
 
 
 class InvestigateResponse(BaseModel):
@@ -142,6 +155,7 @@ class InvestigateResponse(BaseModel):
     trace: list[TraceStep]
     graph: Graph
     meta: Meta
+    recall: list[RecallItem] = []
 
 
 # ---- other responses -----------------------------------------------------------------

@@ -94,7 +94,7 @@ async def _api_error(_r: Request, exc: ApiError):
 
 @app.exception_handler(InvestigationError)
 async def _inv_error(_r: Request, exc: InvestigationError):
-    return _error(400, exc.code, exc.message)
+    return _error(404 if exc.code == "NOT_IN_GRAPH" else 400, exc.code, exc.message)
 
 
 @app.exception_handler(actions_mod.ActionError)

@@ -65,6 +65,33 @@ RETURN i.payload AS payload
 ORDER BY i.created_at DESC
 LIMIT 1
 
+// name: investigation_link_accounts
+// Memory as graph: an investigation is ABOUT the accounts it implicated, so a later
+// investigation anywhere in the bank can find it by walking from those accounts.
+MATCH (i:Investigation {id: $id})
+UNWIND $accounts AS aid
+MATCH (a:Account {id: aid})
+MERGE (i)-[:ABOUT]->(a)
+RETURN count(a) AS linked
+
+// name: recall_investigations
+// Earlier investigations in OTHER cases that implicated any of these accounts.
+MATCH (a:Account)<-[:ABOUT]-(i:Investigation)<-[:HAS_INVESTIGATION]-(c:Case)
+WHERE a.id IN $ids AND c.id <> coalesce($case_id, '')
+RETURN c.id AS case_id, c.title AS case_title, i.id AS investigation_id, i.conclusion AS conclusion,
+       i.created_at AS created_at, collect(DISTINCT a.id) AS account_ids
+ORDER BY created_at DESC
+LIMIT 10
+
+// name: recall_actions
+// Analyst actions (freezes, flags) taken on any of these accounts in OTHER cases.
+MATCH (a:Account)<-[:TARGETS]-(x:Action)<-[:HAS_ACTION]-(c:Case)
+WHERE a.id IN $ids AND c.id <> coalesce($case_id, '')
+RETURN c.id AS case_id, c.title AS case_title, x.type AS type, x.label AS label,
+       x.created_at AS created_at, collect(DISTINCT a.id) AS account_ids
+ORDER BY created_at DESC
+LIMIT 10
+
 // name: proposal_create
 MATCH (i:Investigation {id: $investigation_id})
 CREATE (i)-[:PROPOSES]->(p:Proposal {id: $id, case_id: $case_id, type: $type, label: $label,
