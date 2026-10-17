@@ -425,6 +425,16 @@ pytest -q                                # 34 tests (uses graph "ftm_test", neve
    (~50 s if asleep), then confirm the status pill is green at `graph-hacks-cyan.vercel.app`.
 3. Walk scenarios 1 → 2 → 3; fall back to the **recorded demo video** if the live stack misbehaves.
 
+**LLM request budget (OpenRouter free tier) — learned the hard way, Oct 17:** the agent spends
+~6–7 free-model requests per investigation, so a full pass (case-001 → freeze → follow-up →
+case-002 → case-003) costs **~25–30**. The free cap is **50 requests/day per account, reset at
+00:00 UTC (05:30 IST)** — and local, hosted and rehearsal runs all draw from the same pool. Spend
+it deliberately: when quota runs out the loop degrades gracefully (primary → fallback model →
+rule-based, still correct), but `meta.mode` drops to `rule_based` and the demo tells a weaker
+story. Keep dry-runs local/rule-based, save one full hosted pass for the official rehearsal, and
+consider the one-time **$10 top-up (→ 1000/day)** if the judged run needs its own full pass the
+same day.
+
 ---
 
 ## 11. Phases & timeline
